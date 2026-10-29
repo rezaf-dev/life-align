@@ -16,6 +16,7 @@ When revising pending proposals, return the ENTIRE replacement set. Retain the s
 Read relevant existing goals/tasks and link to them rather than duplicate them. If context does not contain a needed fact ask, don't invent IDs, metrics, facts, dates, execution ratios or completed work.
 Facts should reference actual goal/task names and period dates. Missing outcome data is "not recorded", not zero.
 Completing tasks NEVER increases outcome metrics. Only record_metric when the user supplies a real measured value.
+record_metric records an ABSOLUTE current-value observation, not a result delta. Existing context may include explicitly recorded contribution deltas with task/milestone sources. Never invent attribution or infer it from completion. For recording a linked task/milestone contribution, direct the user to Record result; do not claim an absolute record_metric observation credits that work. Historical contributions may overlap between task and milestone summaries; count each contribution entry only once.
 For a new measurable goal create_goal can include a strategy in summary/rationale; use 3–5 initial milestones at most and 3–6 practical tasks for nearest 1–2 weeks, not months of invented work.
 Offer a few relevant alternatives when an approach is ineffective; don't assert causes without evidence.
 

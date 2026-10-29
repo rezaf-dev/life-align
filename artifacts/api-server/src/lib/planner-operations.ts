@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { measurementValueAt } from '@workspace/api-zod';
 import { requireText, stateSchema, validDate, type Operation, type Workspace } from './planner-state';
 
 /** Pure transactional reducer. Nothing is persisted server-side or sent to the model here. */
@@ -236,8 +237,7 @@ export function applyOperations(raw: unknown, operations: Operation[], requestId
             extraDone: doneInPeriod.filter((t) => !committedIds.has(t.id) && !planned.some((p) => p.id === t.id)).length,
             overdue: state.tasks.filter((t) => !t.archived && t.status === 'open' && (t.dueDate ?? t.plannedDate ?? end) < end).length,
             metrics: state.goals.flatMap((g) => g.metrics.map((m) => {
-              const entries = m.entries.filter((e) => e.date <= end).sort((a, b) => a.date.localeCompare(b.date));
-              return { goalId: g.id, goalTitle: g.title, metricId: m.id, name: m.name, unit: m.unit, kind: m.kind, value: entries.at(-1)?.value ?? m.baseline, target: m.target };
+              return { goalId: g.id, goalTitle: g.title, metricId: m.id, name: m.name, unit: m.unit, kind: m.kind, value: measurementValueAt(m, end), target: m.target };
             })),
           }, adjustments: [], isDemo: false,
         });

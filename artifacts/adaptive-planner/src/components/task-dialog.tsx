@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Field, FormDialog } from '@/components/form-dialog';
 import { addTask, updateTask } from '@/lib/store/actions';
 import { useAppState } from '@/lib/store/store';
+import { RecordResultDialog, TaskContributionSection } from '@/components/contributions';
 import type { Priority, Recurrence, Task } from '@/lib/store/types';
 
 const EFFORTS = [10, 15, 20, 30, 45, 55, 60, 90, 120, 180, 240];
@@ -27,6 +28,8 @@ export function TaskDialog({
   const { goals } = useAppState();
   const { toast } = useToast();
   const [f, setF] = useState(() => init(task, defaults));
+  const [recording, setRecording] = useState(false);
+  const savedGoal = task?.goalId ? goals.find((g) => g.id === task.goalId) : undefined;
 
   useEffect(() => {
     if (open) setF(init(task, defaults));
@@ -63,8 +66,9 @@ export function TaskDialog({
   const selectableGoals = goals.filter((g) => g.status === 'active' || g.status === 'paused' || g.id === f.goalId);
 
   return (
+    <>
     <FormDialog
-      open={open}
+      open={open && !recording}
       onOpenChange={onOpenChange}
       title={task ? 'Edit task' : 'New task'}
       description="Only the title is required. Everything else helps planning."
@@ -161,7 +165,16 @@ export function TaskDialog({
           <Switch checked={f.archived} onCheckedChange={(v) => set('archived', v)} data-testid="switch-task-archived" />
         </label>
       )}
+      <TaskContributionSection
+        goal={savedGoal}
+        taskId={task?.id}
+        onRecord={() => setRecording(true)}
+      />
     </FormDialog>
+    {savedGoal && task && (
+      <RecordResultDialog goal={savedGoal} open={recording} onOpenChange={setRecording} target={{ taskId: task.id }} />
+    )}
+    </>
   );
 }
 

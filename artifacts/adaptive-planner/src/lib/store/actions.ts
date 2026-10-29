@@ -1,5 +1,6 @@
 import { addDaysIso, addMonthsIso, nowStamp, todayIso, uid } from '@/lib/dates';
 import { createSeed } from './seed';
+import { isMeasurementDate, measurementEntrySchema } from '@workspace/api-zod';
 import { getState, isValidState, replaceState, update } from './store';
 import type {
   Adjustment,
@@ -315,13 +316,77 @@ export function logMetric(goalId: string, metricId: string, value: number, date:
     const m = g.metrics.find((x) => x.id === metricId);
     if (!m) return;
     m.entries.push({ id: uid(), date, value, note: note?.trim() || undefined });
-    m.entries.sort((a, b) => (a.date < b.date ? -1 : 1));
+    m.entries.sort((a, b) => a.date.localeCompare(b.date));
+  });
+}
+
+export interface ContributionInput {
+  amount: number;
+  date: string;
+  note?: string;
+  taskId?: string;
+  milestoneId?: string;
+}
+function validateContributionInput(input: Pick<ContributionInput, 'amount' | 'date'>) {
+  if (!Number.isFinite(input.amount) || input.amount === 0) throw new Error('Enter a non-zero measured change.');
+  if (!isMeasurementDate(input.date) || input.date > todayIso()) throw new Error('Choose a real date, today or earlier.');
+}
+export function recordContribution(goalId: string, metricId: string, input: ContributionInput): string {
+  validateContributionInput(input);
+  const id = uid();
+  update((d) => {
+    const goal = findGoal(d, goalId);
+    const metric = goal.metrics.find((m) => m.id === metricId);
+    if (!metric) throw new Error('That measurement no longer exists.');
+    const task = input.taskId ? d.tasks.find((t) => t.id === input.taskId) : undefined;
+    if (input.taskId && (!task || task.goalId !== goalId)) throw new Error('Choose a task linked to this goal.');
+    if (task && input.milestoneId && task.milestoneId !== input.milestoneId) throw new Error('The task belongs to a different milestone.');
+    const milestoneId = task ? task.milestoneId : input.milestoneId;
+    const milestone = milestoneId ? goal.milestones.find((m) => m.id === milestoneId) : undefined;
+    if (milestoneId && !milestone) throw new Error('That milestone no longer exists.');
+    if (!task && !milestone) throw new Error('Choose a contributing task or milestone.');
+    const entry = {
+      id, date: input.date, value: input.amount, note: input.note?.trim() || undefined,
+      mode: 'contribution' as const,
+      source: { taskId: task?.id, taskTitle: task?.title, milestoneId: milestone?.id, milestoneTitle: milestone?.title },
+    };
+    measurementEntrySchema.parse(entry);
+    metric.entries.push(entry);
+    metric.entries.sort((a, b) => a.date.localeCompare(b.date));
+    goal.history.unshift(ev({
+      kind: 'metric',
+      summary: `Recorded contribution to ${metric.name}: ${input.amount > 0 ? '+' : ''}${input.amount} ${metric.unit} from ${task?.title ?? milestone!.title}`,
+      reason: input.note?.trim() || undefined,
+    }));
+  });
+  return id;
+}
+export function editContribution(goalId: string, metricId: string, entryId: string, patch: Pick<ContributionInput, 'amount' | 'date' | 'note'>) {
+  validateContributionInput(patch);
+  update((d) => {
+    const goal = findGoal(d, goalId);
+    const metric = goal.metrics.find((m) => m.id === metricId);
+    const entry = metric?.entries.find((e) => e.id === entryId);
+    if (!metric || !entry || entry.mode !== 'contribution') throw new Error('That contribution no longer exists.');
+    const before = `${entry.value} ${metric.unit} on ${entry.date}`;
+    entry.value = patch.amount; entry.date = patch.date; entry.note = patch.note?.trim() || undefined;
+    metric.entries.sort((a, b) => a.date.localeCompare(b.date));
+    goal.history.unshift(ev({
+      kind: 'metric', summary: `Corrected recorded contribution to ${metric.name}`,
+      from: before, to: `${entry.value} ${metric.unit} on ${entry.date}`, reason: patch.note?.trim() || undefined,
+    }));
   });
 }
 
 export function deleteMetricEntry(goalId: string, metricId: string, entryId: string) {
   update((d) => {
-    const m = findGoal(d, goalId).metrics.find((x) => x.id === metricId);
+    const goal = findGoal(d, goalId);
+    const m = goal.metrics.find((x) => x.id === metricId);
+    const entry = m?.entries.find((e) => e.id === entryId);
+    if (entry?.mode === 'contribution') goal.history.unshift(ev({
+      kind: 'metric', summary: `Removed contribution to ${m!.name}: ${entry.value} ${m!.unit}`,
+      from: `${entry.source?.taskTitle ?? entry.source?.milestoneTitle}: ${entry.value}`,
+    }));
     if (m) m.entries = m.entries.filter((e) => e.id !== entryId);
   });
 }

@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
-import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Repeat, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Repeat, Trash2, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckButton } from '@/components/check-button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { TaskDialog } from '@/components/task-dialog';
+import { ContributionChips, RecordResultDialog } from '@/components/contributions';
 import { AreaDot, SampleMark } from '@/components/primitives';
 import { addDaysIso, fmt, nextMonday, relDay, todayIso } from '@/lib/dates';
 import { archiveTask, deleteTask, rescheduleTasks, toggleTask } from '@/lib/store/actions';
@@ -165,6 +166,7 @@ function TaskRowInner({
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [recording, setRecording] = useState(false);
   const goal = goals.find((g) => g.id === task.goalId);
   const done = task.status === 'done';
   const today = todayIso();
@@ -189,6 +191,7 @@ function TaskRowInner({
     if (task.dueDate && !done)
       meta.push(<span key="d" className={cn('font-num', task.dueDate < today && 'text-destructive')}>due {relDay(task.dueDate).toLowerCase()}</span>);
     if (task.effort > 0 && !done) meta.push(<span key="e" className="font-num">{effortLabel(task.effort)}</span>);
+    if (goal?.metrics.length) meta.push(<ContributionChips key="r" goal={goal} filter={{ taskId: task.id }} testId={`text-task-result-${task.id}`} />);
     if (done && task.completedAt) meta.push(<span key="c" className="font-num">done {relDay(task.completedAt.slice(0, 10)).toLowerCase()}</span>);
   }
 
@@ -262,6 +265,11 @@ function TaskRowInner({
               <CalendarDays /> Plan for today
             </DropdownMenuItem>
           )}
+          {goal && goal.metrics.length > 0 && (
+            <DropdownMenuItem onSelect={() => setRecording(true)} data-testid={`menu-record-result-${task.id}`}>
+              <TrendingUp /> Record result
+            </DropdownMenuItem>
+          )}
           {goal && (
             <DropdownMenuItem asChild>
               <Link href={`/goals/${goal.id}`}>
@@ -284,6 +292,7 @@ function TaskRowInner({
         </DropdownMenuContent>
       </DropdownMenu>
       <TaskDialog open={editing} onOpenChange={setEditing} task={task} />
+      {goal && recording && <RecordResultDialog goal={goal} open={recording} onOpenChange={setRecording} target={{ taskId: task.id }} />}
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}

@@ -13,6 +13,7 @@ import {
   Plus,
   Target,
   Trash2,
+  TrendingUp,
   X,
   CheckCheck,
   Ban,
@@ -47,14 +48,14 @@ import {
   changeTargetDate,
   deleteGoal,
   deleteMetric,
-  deleteMetricEntry,
   deleteMilestone,
   rescheduleMilestone,
   setGoalStatus,
   splitGoal,
   toggleMilestone,
 } from '@/lib/store/actions';
-import { formatValue, goalExecution, goalHealth, metricProgress, metricValueAt } from '@/lib/store/selectors';
+import { formatValue, goalExecution, goalHealth, metricProgress, metricTimeline, metricValueAt } from '@/lib/store/selectors';
+import { ContributionChips, MetricAttribution, MetricEntryRow, RecordResultDialog, type RecordResultTarget } from '@/components/contributions';
 import { useAppState } from '@/lib/store/store';
 import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
@@ -74,7 +75,8 @@ type DialogKind =
   | { deleteMs: string }
   | { log: string | undefined }
   | { metricTarget: string }
-  | { deleteMetric: string };
+  | { deleteMetric: string }
+  | { record: RecordResultTarget };
 
 export default function GoalDetailPage() {
   const params = useParams<{ id: string }>();
@@ -142,7 +144,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <AskButton focus={{ screen: 'goal', goalId: goal.id }} label="Ask about this goal" />
           {goal.metrics.length > 0 ? (
-            <Button onClick={() => setDialog({ log: undefined })} data-testid="button-log-result-top"><LineChart /> Log result</Button>
+            <Button onClick={() => setDialog({ record: {} })} data-testid="button-record-contribution-top"><TrendingUp /> Record contribution</Button>
           ) : (
             <Button onClick={() => setDialog('metric')} data-testid="button-add-metric-top"><Plus /> Add result measure</Button>
           )}
@@ -273,8 +275,12 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
                         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                           <span className={cn('font-num', late && 'text-destructive')}>{m.done && m.completedAt ? `reached ${fmt(m.completedAt.slice(0, 10))}` : `${late ? 'was due' : 'due'} ${fmt(m.dueDate, 'MMM d')}`}</span>
                           {linked.length > 0 && <span>{linked.filter((t) => t.status === 'done').length} of {linked.length} tasks done</span>}
+                          <ContributionChips goal={goal} filter={{ milestoneId: m.id }} testId={`text-milestone-contribution-${m.id}`} />
                         </div>
                       </div>
+                      <Button variant="ghost" size="icon" className="size-10 text-muted-foreground sm:size-8" aria-label={`Record result for ${m.title}`} title="Record result" onClick={() => setDialog(goal.metrics.length ? { record: { milestoneId: m.id } } : 'metric')} data-testid={`button-record-milestone-${m.id}`}>
+                        <TrendingUp />
+                      </Button>
                       <Button variant="ghost" size="icon" className="size-10 text-muted-foreground sm:size-8" aria-label={`Reschedule ${m.title}`} onClick={() => setDialog({ reschedule: m.id })} data-testid={`button-reschedule-milestone-${m.id}`}>
                         <CalendarClock />
                       </Button>
@@ -293,25 +299,22 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
           <Section
             title="Results"
             aside={
-              <div className="flex gap-1">
-                <Button size="sm" variant="ghost" onClick={() => setDialog('metric')} data-testid="button-add-metric"><Plus /> Measure</Button>
-                {goal.metrics.length > 0 && <Button size="sm" onClick={() => setDialog({ log: undefined })} data-testid="button-log-result"><LineChart /> Log</Button>}
-              </div>
+              <Button size="sm" variant="ghost" onClick={() => setDialog('metric')} data-testid="button-add-metric"><Plus /> Measure</Button>
             }
           >
-            <p className="-mt-2 mb-4 text-xs text-muted-foreground">Numbers you log. Completing tasks never changes them.</p>
+            <p className="-mt-2 mb-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">Completing tasks never changes results. <span className="text-foreground">Record contribution</span> credits a measured change (+/&minus;) to a task or milestone &mdash; your own historical attribution, not proof of cause. <span className="text-foreground">Log current value</span> is an absolute checkpoint that reconciles the total; it is never counted as extra contribution.</p>
             {goal.metrics.length === 0 ? (
               <EmptyState title="Nothing measured yet" body="Add a result measure: the number that proves this goal is working." action={<Button size="sm" onClick={() => setDialog('metric')}>Add measure</Button>} />
             ) : (
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
                 {[{ label: 'Outcomes', hint: 'The result itself', list: outcomeMetrics }, { label: 'Activity', hint: 'Effort you control', list: leadingMetrics }].map(
                   (grp) =>
                     grp.list.length > 0 && (
-                      <div key={grp.label}>
+                      <div key={grp.label} className="min-w-0">
                         <div className="mb-3 text-sm font-medium">{grp.label} <span className="font-normal text-muted-foreground">&middot; {grp.hint}</span></div>
                         <div className="space-y-5">
                           {grp.list.map((m) => (
-                            <MetricBlock key={m.id} goal={goal} metric={m} onLog={() => setDialog({ log: m.id })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
+                            <MetricBlock key={m.id} goal={goal} metric={m} onRecord={(entryId) => setDialog({ record: { metricId: m.id, entryId } })} onLog={() => setDialog({ log: m.id })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
                           ))}
                         </div>
                       </div>
@@ -380,6 +383,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       {typeof dialog === 'object' && dialog && 'metricTarget' in dialog && (
         <MetricTargetDialog goal={goal} metricId={dialog.metricTarget} onClose={close} />
       )}
+      <RecordResultDialog goal={goal} open={typeof dialog === 'object' && !!dialog && 'record' in dialog} target={typeof dialog === 'object' && dialog && 'record' in dialog ? dialog.record : undefined} onOpenChange={(o) => !o && close()} />
       <SplitDialog goal={goal} open={dialog === 'split'} onClose={close} onDone={(id) => navigate(`/goals/${id}`)} />
       <ConfirmDialog
         open={typeof dialog === 'object' && !!dialog && 'deleteMs' in dialog}
@@ -429,38 +433,41 @@ function Fact({ label, value, sub, onClick, testId }: { label: string; value: st
   );
 }
 
-function MetricBlock({ goal, metric, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onLog: () => void; onTarget: () => void; onDelete: () => void }) {
+function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onRecord: (entryId?: string) => void; onLog: () => void; onTarget: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const entries = [...metric.entries].reverse();
-  const values = metric.entries.map((e) => e.value);
+  const timeline = metricTimeline(metric);
+  const entries = [...timeline].reverse();
+  const values = timeline.map((p) => p.value);
   const lo = Math.min(metric.baseline, ...values, metric.target);
   const hi = Math.max(metric.baseline, ...values, metric.target);
-  const pts = metric.entries.map((e, i) => {
-    const x = metric.entries.length === 1 ? 50 : (i / (metric.entries.length - 1)) * 100;
-    const y = hi === lo ? 50 : 100 - ((e.value - lo) / (hi - lo)) * 100;
+  const pts = timeline.map((p, i) => {
+    const x = timeline.length === 1 ? 50 : (i / (timeline.length - 1)) * 100;
+    const y = hi === lo ? 50 : 100 - ((p.value - lo) / (hi - lo)) * 100;
     return `${x},${y}`;
   });
   const targetY = hi === lo ? 0 : 100 - ((metric.target - lo) / (hi - lo)) * 100;
   return (
-    <div data-testid={`metric-${metric.id}`}>
+    <div className="min-w-0 w-full max-w-full" data-testid={`metric-${metric.id}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1 break-words">
           <div className="text-sm font-medium">{metric.name}</div>
-          <div className="font-num text-[1.35rem] leading-tight">
+          <div className="font-num text-[1.35rem] leading-tight" data-testid={`text-metric-value-${metric.id}`}>
             {formatValue(metricValueAt(metric), metric.unit)}
             <span className="text-sm text-muted-foreground"> / {formatValue(metric.target, metric.unit)}</span>
           </div>
         </div>
-        {metric.entries.length > 1 && (
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-10 w-24 overflow-visible" aria-hidden>
+        {timeline.length > 1 && (
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-10 w-16 shrink-0 overflow-visible sm:w-24" aria-hidden>
             <line x1="0" x2="100" y1={targetY} y2={targetY} stroke="currentColor" strokeDasharray="2 3" className="text-foreground/25" vectorEffect="non-scaling-stroke" />
             <polyline points={pts.join(' ')} fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
           </svg>
         )}
       </div>
       <PaceBar progress={metricProgress(metric)} area={goal.area} className="mt-2" />
+      <MetricAttribution goal={goal} metric={metric} />
       <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onLog} data-testid={`button-log-${metric.id}`}><LineChart /> Log</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onRecord()} data-testid={`button-record-${metric.id}`}><TrendingUp /> Contribution</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onLog} data-testid={`button-log-${metric.id}`}><LineChart /> Log current value</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onTarget} data-testid={`button-target-${metric.id}`}><Target /> Target</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} data-testid={`button-entries-${metric.id}`}>
           {metric.entries.length} entries <ChevronDown className={cn('transition-transform', expanded && 'rotate-180')} />
@@ -468,17 +475,10 @@ function MetricBlock({ goal, metric, onLog, onTarget, onDelete }: { goal: Goal; 
         <Button size="sm" variant="ghost" className="ml-auto h-9 px-2 text-muted-foreground sm:h-8" onClick={onDelete} aria-label={`Remove ${metric.name}`} data-testid={`button-delete-metric-${metric.id}`}><Trash2 /></Button>
       </div>
       {expanded && (
-        <ul className="mt-2 space-y-1 rounded-lg bg-muted/50 p-2">
-          {entries.length === 0 && <li className="px-1 text-xs text-muted-foreground">No values logged yet. Baseline {formatValue(metric.baseline, metric.unit)}.</li>}
-          {entries.map((e) => (
-            <li key={e.id} className="group flex items-center gap-3 px-1 text-xs">
-              <span className="w-14 font-num text-muted-foreground">{fmt(e.date, 'MMM d')}</span>
-              <span className="w-20 font-num">{formatValue(e.value, metric.unit)}</span>
-              <span className="flex-1 truncate text-muted-foreground">{e.note}</span>
-              <button type="button" className="grid size-8 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete entry from ${fmt(e.date, 'MMM d')}`} onClick={() => deleteMetricEntry(goal.id, metric.id, e.id)}>
-                <X className="size-3" />
-              </button>
-            </li>
+        <ul className="mt-2 space-y-0.5 rounded-lg bg-muted/50 p-2" data-testid={`list-entries-${metric.id}`}>
+          {entries.length === 0 && <li className="px-1 text-xs text-muted-foreground">Nothing logged yet. Baseline {formatValue(metric.baseline, metric.unit)}.</li>}
+          {entries.map(({ entry }) => (
+            <MetricEntryRow key={entry.id} goal={goal} metric={metric} entry={entry} onEdit={() => onRecord(entry.id)} />
           ))}
         </ul>
       )}

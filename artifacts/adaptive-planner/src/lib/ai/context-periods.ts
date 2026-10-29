@@ -1,5 +1,6 @@
 import { addDaysIso, addMonthsIso, monthEndIso, monthStartIso, weekStartIso } from '@/lib/dates';
 import type { AppState } from '@/lib/store/types';
+import { metricValueAt } from '@/lib/store/selectors';
 
 /** Retrieve period aggregates locally rather than uploading every historical record. */
 export function periodContext(state: AppState, message: string, today: string) {
@@ -49,10 +50,11 @@ export function periodContext(state: AppState, message: string, today: string) {
         id: g.id, title: g.title,
         completedActions: completed.filter((t) => t.goalId === g.id).length,
         metrics: g.metrics.map((m) => {
-          const before = m.entries.filter((e) => e.date < start).sort((a, b) => a.date.localeCompare(b.date));
           const within = m.entries.filter((e) => e.date >= start && e.date <= end).sort((a, b) => a.date.localeCompare(b.date));
-          return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, startValue: before.at(-1)?.value ?? m.baseline,
-            lastRecordedInPeriod: within.at(-1)?.value ?? null, measurementsInPeriod: within.length, target: m.target };
+          return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, startValue: metricValueAt(m, addDaysIso(start, -1)),
+            lastRecordedInPeriod: within.length ? metricValueAt(m, end) : null, measurementsInPeriod: within.length, target: m.target,
+            attributedResults: within.filter((e) => e.mode === 'contribution').map((e) => ({ change: e.value, source: e.source, date: e.date })),
+          };
         }),
         milestoneStatusNow: g.milestones.filter((m) => m.dueDate >= start && m.dueDate <= end).map((m) => ({ title: m.title, dueDate: m.dueDate, done: m.done, completedAt: m.completedAt })),
         decisions: g.history.filter((h) => h.at.slice(0, 10) >= start && h.at.slice(0, 10) <= end).slice(0, 6).map((h) => ({ kind: h.kind, summary: h.summary, reason: h.reason })),

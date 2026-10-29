@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApplyAiOperationsBody } from '@workspace/api-zod';
+import { ApplyAiOperationsBody, measurementEntrySchema } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
 export type Operation = z.infer<typeof operationSchema>;
@@ -16,7 +16,7 @@ const milestone = z.object({
 const metric = z.object({
   id, name: text, unit: text, kind: z.enum(['outcome', 'leading']),
   baseline: z.number(), target: z.number(),
-  entries: z.array(z.object({ id, date: text, value: z.number(), note: text.optional() }).passthrough()),
+  entries: z.array(measurementEntrySchema),
 }).passthrough();
 const goal = z.object({
   id, title: text, outcome: text, area: z.enum(['business', 'fitness', 'english', 'personal']),

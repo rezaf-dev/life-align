@@ -1,13 +1,12 @@
 import { addDaysIso, daysBetween, todayIso } from '@/lib/dates';
 import type { AppState, Goal, Metric, ReviewSnapshot, Task } from './types';
+import { measurementValueAt } from '@workspace/api-zod';
+export { measurementTimeline as metricTimeline, contributionAmount, contributionPercent } from '@workspace/api-zod';
 
 export const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
 
 export function metricValueAt(m: Metric, at?: string) {
-  const sorted = [...m.entries]
-    .filter((e) => !at || e.date <= at)
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return sorted.length ? sorted[sorted.length - 1].value : m.baseline;
+  return measurementValueAt(m, at);
 }
 
 export function metricProgress(m: Metric) {

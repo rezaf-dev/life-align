@@ -46,7 +46,9 @@ function compactGoal(g: Goal, deep: boolean, tasks: Task[]) {
       baseline: m.baseline,
       target: m.target,
       current: metricValueAt(m),
-      recent: deep ? [...m.entries].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8).map((e) => ({ date: e.date, value: e.value })) : undefined,
+      recent: deep ? [...m.entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map((e) => ({
+        date: e.date, value: e.value, mode: e.mode ?? 'absolute-observation', source: e.source,
+      })) : undefined,
     })),
     openTasks: tasks.filter((t) => t.goalId === g.id && isOpen(t)).length,
   };

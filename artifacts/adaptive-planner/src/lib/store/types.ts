@@ -23,6 +23,14 @@ export interface MetricEntry {
   date: string;
   value: number;
   note?: string;
+  /** An explicitly measured change. Entries without mode remain absolute observations. */
+  mode?: 'contribution';
+  source?: {
+    taskId?: string;
+    taskTitle?: string;
+    milestoneId?: string;
+    milestoneTitle?: string;
+  };
 }
 
 export interface Metric {

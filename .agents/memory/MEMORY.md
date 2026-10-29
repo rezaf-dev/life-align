@@ -1,1 +1,2 @@
 - [AI approval boundaries](ai-approval-boundaries.md) — why model proposals and local planning persistence stay separate.
+- [Responsive expanded states](responsive-expanded-states.md) — verify mobile width with histories expanded, not just the initial page.

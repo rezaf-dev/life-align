@@ -189,14 +189,14 @@ export function LogMetricDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Log a result"
-      description="Record what is actually true now. Results are logged by you — finishing tasks never changes them automatically."
-      submitLabel="Log result"
+      title="Log current value"
+      description="An absolute reading of what is true now. It reconciles the total and is not counted as a contribution. To credit a change to a task or milestone, use Record contribution."
+      submitLabel="Log value"
       canSubmit={!!metric && value !== '' && !Number.isNaN(Number(value)) && !!date}
       onSubmit={() => {
         if (!metric) return;
         logMetric(goal.id, metric.id, Number(value), date, note);
-        toast({ title: 'Result logged', description: `${metric.name}: ${formatValue(Number(value), metric.unit)}` });
+        toast({ title: 'Value logged', description: `${metric.name}: ${formatValue(Number(value), metric.unit)}` });
         onOpenChange(false);
       }}
     >
