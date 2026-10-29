@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/app-shell';
+import { TaskCompletionProvider } from '@/components/task-completion';
 import { AccessProvider } from '@/components/auth/access-provider';
 import { AuthBackdrop } from '@/components/auth/auth-chrome';
 import { PrivateRoute } from '@/components/auth/gates';
@@ -156,6 +157,7 @@ function PrivateApp() {
   const [location] = useLocation();
   return (
     <PrivateRoute>
+      <TaskCompletionProvider>
       <AppShell>
         <RoutedErrorBoundary>
           <motion.div
@@ -178,6 +180,7 @@ function PrivateApp() {
           </motion.div>
         </RoutedErrorBoundary>
       </AppShell>
+      </TaskCompletionProvider>
     </PrivateRoute>
   );
 }

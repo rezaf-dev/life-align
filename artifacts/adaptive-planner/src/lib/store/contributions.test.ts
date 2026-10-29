@@ -1,7 +1,7 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyWorkspace, getState, hydrateState, setWorkspaceWriter } from './store';
-import { deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry, addMetric, changeMetricTarget } from './actions';
+import { completeTaskWithResult, deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry, addMetric, changeMetricTarget } from './actions';
 import { contributionAmount, metricValueAt, metricProgress, goalHealth, measurementTargetAt } from './selectors';
 import type { Goal, Task } from './types';
 import { applyOperations } from '../../../../api-server/src/lib/planner-operations';
@@ -65,6 +65,76 @@ test('target edits keep previous periods intact through server validation and ac
   assert.equal(measurementTargetAt(m), 40);
 });
 const metric = () => getState().goals[0].metrics[0];
+test('finishing with a result publishes completion and attribution in one workspace write', () => {
+  let writes = 0;
+  setWorkspaceWriter((next) => {
+    writes++;
+    assert.equal(next.tasks.find((t) => t.id === 'task')?.status, 'done');
+    assert.equal(next.goals[0].metrics[0].entries.length, 1);
+  });
+  completeTaskWithResult('task', { metricId: 'metric', amount: 4, date: '2024-01-02', note: 'Actual interviews' });
+  assert.equal(writes, 1);
+  assert.equal(metricValueAt(metric()), 4);
+  assert.equal(contributionAmount(metric(), { milestoneId: 'milestone' }), 4);
+  assert.ok(getState().tasks[0].completedAt);
+});
+test('invalid result leaves task, recurring occurrence and ledger untouched', () => {
+  updateTask('task', { recurrence: 'weekly', plannedDate: '2024-01-01' });
+  const before = structuredClone(getState());
+  for (const patch of [
+    { metricId: 'missing', amount: 3, date: '2024-01-02' },
+    { metricId: 'metric', amount: 0, date: '2024-01-02' },
+    { metricId: 'metric', amount: NaN, date: '2024-01-02' },
+    { metricId: 'metric', amount: 3, date: '2099-01-02' },
+  ]) {
+    assert.throws(() => completeTaskWithResult('task', patch));
+    assert.deepEqual(getState(), before);
+  }
+});
+test('completion retries never duplicate measured results or recurring work', () => {
+  updateTask('task', { recurrence: 'weekly', plannedDate: '2024-01-01' });
+  const result = { metricId: 'metric', amount: 2, date: '2024-01-02' };
+  assert.equal(completeTaskWithResult('task', result).spawned, '2024-01-08');
+  const saved = structuredClone(getState());
+  completeTaskWithResult('task', result);
+  assert.deepEqual(getState(), saved);
+  assert.equal(getState().tasks.length, 2);
+  assert.equal(getState().tasks.find((t) => t.status === 'open')?.completedAt, undefined);
+});
+test('reopening retains prior results and completing without a new result does not add credit', () => {
+  completeTaskWithResult('task', { metricId: 'metric', amount: 5, date: '2024-01-02' });
+  toggleTask('task');
+  assert.equal(metricValueAt(metric()), 5);
+  completeTaskWithResult('task');
+  assert.equal(metricValueAt(metric()), 5);
+  assert.equal(metric().entries.length, 1);
+});
+test('no-result completion works without goal measurements or a linked goal', () => {
+  updateTask('task', { goalId: undefined, milestoneId: undefined });
+  assert.throws(() => completeTaskWithResult('task', { metricId: 'metric', amount: 1, date: '2024-01-02' }));
+  assert.equal(getState().tasks[0].status, 'open');
+  completeTaskWithResult('task');
+  assert.equal(getState().tasks[0].status, 'done');
+  assert.equal(metric().entries.length, 0);
+  assert.throws(() => completeTaskWithResult('missing'));
+});
+test('a rejected workspace write does not partially publish completion or contribution', () => {
+  const before = structuredClone(getState());
+  setWorkspaceWriter(() => { throw new Error('Account changed'); });
+  assert.throws(() => completeTaskWithResult('task', { metricId: 'metric', amount: 1, date: '2024-01-02' }), /Account changed/);
+  assert.deepEqual(getState(), before);
+});
+test('completion can credit a negative measured change and backdated recurring hours', () => {
+  completeTaskWithResult('task', { metricId: 'metric', amount: -3, date: '2024-01-02' });
+  assert.equal(metricValueAt(metric()), -3);
+  toggleTask('task');
+  addMetric('goal', { name: 'Hours', unit: 'hours', kind: 'leading', frequency: 'monthly', baseline: 0, target: 30 });
+  const mid = getState().goals[0].metrics[1].id;
+  completeTaskWithResult('task', { metricId: mid, amount: 1.5, date: '2024-02-29' });
+  const hours = getState().goals[0].metrics[1];
+  assert.equal(metricValueAt(hours, '2024-02-29'), 1.5);
+  assert.equal(metricValueAt(hours, '2024-03-01'), 0);
+});
 test('a task result is credited once to its task, milestone and goal without completing work', () => {
   recordContribution('goal', 'metric', { amount: 5, date: '2024-01-02', taskId: 'task' });
   assert.equal(metricValueAt(metric()), 5);

@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { QuickAdd } from '@/components/quick-add';
 import { TaskRow } from '@/components/task-row';
+import { useTaskCompletion } from '@/components/task-completion';
 import { LogMetricDialog } from '@/components/goal-dialogs';
 import { AreaDot, EmptyState, HealthPill, PaceBar } from '@/components/primitives';
 import { addDaysIso, daysBetween, fmt, nowStamp, relDay, todayIso, weekStartIso } from '@/lib/dates';
-import { dismissReminder, rescheduleTasks, toggleTask } from '@/lib/store/actions';
+import { dismissReminder, rescheduleTasks } from '@/lib/store/actions';
 import { generateInsights } from '@/lib/store/insights';
 import {
   dueReminders,
@@ -79,6 +80,7 @@ function Disclosure({
 export default function OverviewPage() {
   const state = useAppState();
   const { toast } = useToast();
+  const completion = useTaskCompletion();
   const today = todayIso();
   const ws = weekStartIso(today);
   const [logGoal, setLogGoal] = useState<Goal | null>(null);
@@ -164,7 +166,7 @@ export default function OverviewPage() {
                     {t.title}
                     <span className="ml-1.5 font-num text-xs text-muted-foreground">{t.reminder!.slice(11)}</span>
                   </span>
-                  <Button size="icon" variant="ghost" className="size-10 sm:size-8" aria-label={`Mark ${t.title} done`} onClick={() => { toggleTask(t.id); toast({ title: 'Done' }); }} data-testid={`button-reminder-done-${t.id}`}>
+                  <Button size="icon" variant="ghost" className="size-10 sm:size-8" aria-label={`Mark ${t.title} done`} onClick={() => completion.toggle(t)} data-testid={`button-reminder-done-${t.id}`}>
                     <Check />
                   </Button>
                   {t.plannedDate !== today && (

@@ -12,13 +12,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useTaskCompletion } from '@/components/task-completion';
 import { CheckButton } from '@/components/check-button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { TaskDialog } from '@/components/task-dialog';
 import { ContributionChips, RecordResultDialog } from '@/components/contributions';
 import { AreaDot, SampleMark } from '@/components/primitives';
 import { addDaysIso, fmt, nextMonday, relDay, todayIso } from '@/lib/dates';
-import { archiveTask, deleteTask, rescheduleTasks, toggleTask } from '@/lib/store/actions';
+import { archiveTask, deleteTask, rescheduleTasks } from '@/lib/store/actions';
 import { effortLabel, isOverdue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import type { Task } from '@/lib/store/types';
@@ -171,11 +172,8 @@ function TaskRowInner({
   const done = task.status === 'done';
   const today = todayIso();
 
-  const onToggle = () => {
-    const wasOpen = task.status === 'open';
-    const { spawned } = toggleTask(task.id);
-    if (wasOpen && spawned) toast({ title: 'Done. Next one is scheduled.', description: `Repeats on ${relDay(spawned)}.` });
-  };
+  const completion = useTaskCompletion();
+  const onToggle = () => completion.toggle(task);
 
   const meta: ReactElement[] = [];
   if (!compact) {

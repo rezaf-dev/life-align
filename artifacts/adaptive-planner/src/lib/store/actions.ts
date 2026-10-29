@@ -75,9 +75,42 @@ export function toggleTask(id: string): { spawned?: string } {
     const t = d.tasks.find((x) => x.id === id);
     if (!t) return;
     if (t.status === 'open') {
-      t.status = 'done';
-      t.completedAt = nowStamp();
-      if (t.recurrence !== 'none' && !t.spawnedNextId) {
+      spawned = finishTask(d, t);
+    } else {
+      t.status = 'open';
+      t.completedAt = undefined;
+    }
+  });
+  return { spawned };
+}
+
+/** The completion and its measured result share a single workspace write. */
+export function completeTaskWithResult(
+  id: string,
+  result?: { metricId: string; amount: number; date: string; note?: string },
+): { spawned?: string } {
+  const existing = getState().tasks.find((t) => t.id === id);
+  if (!existing) throw new Error('That task no longer exists.');
+  // Saving again after a network failure must not credit or spawn twice.
+  if (existing.status === 'done') return {};
+  let spawned: string | undefined;
+  update((d) => {
+    const task = d.tasks.find((t) => t.id === id)!;
+    if (result) {
+      if (!task.goalId) throw new Error('Link this task to a goal before recording a result.');
+      recordContributionInDraft(d, task.goalId, result.metricId, {
+        amount: result.amount, date: result.date, note: result.note, taskId: task.id,
+      });
+    }
+    spawned = finishTask(d, task);
+  });
+  return { spawned };
+}
+
+function finishTask(d: AppState, t: Task): string | undefined {
+  t.status = 'done';
+  t.completedAt = nowStamp();
+  if (t.recurrence !== 'none' && !t.spawnedNextId) {
         const base = t.plannedDate ?? t.dueDate ?? todayIso();
         const next: Task = {
           ...t,
@@ -93,15 +126,10 @@ export function toggleTask(id: string): { spawned?: string } {
           isDemo: false,
         };
         t.spawnedNextId = next.id;
-        spawned = next.plannedDate;
         d.tasks.unshift(next);
-      }
-    } else {
-      t.status = 'open';
-      t.completedAt = undefined;
-    }
-  });
-  return { spawned };
+        return next.plannedDate;
+  }
+  return undefined;
 }
 
 export function rescheduleTasks(ids: string[], date: string | undefined) {
@@ -352,9 +380,14 @@ function validateContributionInput(input: Pick<ContributionInput, 'amount' | 'da
   if (!isMeasurementDate(input.date) || input.date > todayIso()) throw new Error('Choose a real date, today or earlier.');
 }
 export function recordContribution(goalId: string, metricId: string, input: ContributionInput): string {
+  let id = '';
+  update((d) => { id = recordContributionInDraft(d, goalId, metricId, input); });
+  return id;
+}
+
+function recordContributionInDraft(d: AppState, goalId: string, metricId: string, input: ContributionInput): string {
   validateContributionInput(input);
   const id = uid();
-  update((d) => {
     const goal = findGoal(d, goalId);
     const metric = goal.metrics.find((m) => m.id === metricId);
     if (!metric) throw new Error('That measurement no longer exists.');
@@ -378,7 +411,6 @@ export function recordContribution(goalId: string, metricId: string, input: Cont
       summary: `Recorded contribution to ${metric.name}: ${input.amount > 0 ? '+' : ''}${input.amount} ${metric.unit} from ${task?.title ?? milestone!.title}`,
       reason: input.note?.trim() || undefined,
     }));
-  });
   return id;
 }
 export function editContribution(goalId: string, metricId: string, entryId: string, patch: Pick<ContributionInput, 'amount' | 'date' | 'note'>) {
