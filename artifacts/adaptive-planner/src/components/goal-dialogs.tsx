@@ -7,8 +7,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Field, FormDialog } from '@/components/form-dialog';
 import { addDaysIso, todayIso } from '@/lib/dates';
 import { addGoal, editGoalBasics, logMetric } from '@/lib/store/actions';
-import { formatValue, metricValueAt } from '@/lib/store/selectors';
+import { formatValue, metricValueAt, measurementTargetAt } from '@/lib/store/selectors';
 import { AREAS } from '@/lib/store/types';
+import { FrequencySelect, PeriodCreditHint, isRecurring, type Frequency } from '@/components/measurement-period';
 import type { Area, Goal, MetricKind, Priority } from '@/lib/store/types';
 
 export function AreaSelect({ value, onChange }: { value: Area; onChange: (a: Area) => void }) {
@@ -50,6 +51,7 @@ const blank = () => ({
   metricBaseline: '0',
   metricTarget: '',
   metricKind: 'outcome' as MetricKind,
+  metricFrequency: 'cumulative' as Frequency,
 });
 
 export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -61,7 +63,8 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   }, [open]);
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) =>
     setF((p) => ({ ...p, [k]: v }));
-  const metricOk = !f.metricName.trim() || (f.metricTarget !== '' && !Number.isNaN(Number(f.metricTarget)));
+  const goalRecurring = f.metricFrequency !== 'cumulative';
+  const metricOk = !f.metricName.trim() || (f.metricTarget !== '' && !Number.isNaN(Number(f.metricTarget)) && (!goalRecurring || Number(f.metricTarget) > 0));
 
   return (
     <FormDialog
@@ -85,9 +88,10 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             ? {
                 name: f.metricName.trim(),
                 unit: f.metricUnit.trim(),
-                baseline: Number(f.metricBaseline) || 0,
+                baseline: goalRecurring ? 0 : Number(f.metricBaseline) || 0,
                 target: Number(f.metricTarget),
                 kind: f.metricKind,
+                frequency: f.metricFrequency,
               }
             : undefined,
         });
@@ -119,9 +123,16 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <Input placeholder="Monthly revenue" value={f.metricName} onChange={(e) => set('metricName', e.target.value)} data-testid="input-goal-metric-name" />
           </Field>
           <Field label="Unit"><Input placeholder="$, kg" value={f.metricUnit} onChange={(e) => set('metricUnit', e.target.value)} data-testid="input-goal-metric-unit" /></Field>
-          <Field label="Start"><Input type="number" step="any" value={f.metricBaseline} onChange={(e) => set('metricBaseline', e.target.value)} data-testid="input-goal-metric-baseline" /></Field>
-          <Field label="Target"><Input type="number" step="any" value={f.metricTarget} onChange={(e) => set('metricTarget', e.target.value)} data-testid="input-goal-metric-target" /></Field>
+          {goalRecurring ? (
+            <Field label="Start"><div className="flex h-10 items-center rounded-md border border-dashed border-border px-3 font-num text-sm text-muted-foreground" data-testid="text-goal-metric-baseline-fixed">0</div></Field>
+          ) : (
+            <Field label="Start"><Input type="number" step="any" value={f.metricBaseline} onChange={(e) => set('metricBaseline', e.target.value)} data-testid="input-goal-metric-baseline" /></Field>
+          )}
+          <Field label={goalRecurring ? (f.metricFrequency === 'weekly' ? 'Target / week' : 'Target / month') : 'Target'}><Input type="number" step="any" min={goalRecurring ? 0 : undefined} value={f.metricTarget} onChange={(e) => set('metricTarget', e.target.value)} data-testid="input-goal-metric-target" /></Field>
         </div>
+        <Field label="Measured" className="mt-3" hint={goalRecurring ? 'Each period starts at 0 with no carryover. Example: 30 hours each month.' : 'One running total from the start value toward the target.'}>
+          <FrequencySelect value={f.metricFrequency} onChange={(v) => set('metricFrequency', v)} testId="select-goal-metric-frequency" />
+        </Field>
       </div>
     </FormDialog>
   );
@@ -163,11 +174,14 @@ export function LogMetricDialog({
   metricId,
   open,
   onOpenChange,
+  initialDate,
 }: {
   goal: Goal;
   metricId?: string;
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  /** Prefill date, e.g. end of a historical period being viewed. Clamped to today. */
+  initialDate?: string;
 }) {
   const { toast } = useToast();
   const [mid, setMid] = useState(metricId ?? goal.metrics[0]?.id ?? '');
@@ -179,11 +193,12 @@ export function LogMetricDialog({
       const id = metricId ?? goal.metrics[0]?.id ?? '';
       setMid(id);
       const m = goal.metrics.find((x) => x.id === id);
-      setValue(m ? String(metricValueAt(m)) : '');
-      setDate(todayIso());
+      const d = initialDate && initialDate < todayIso() ? initialDate : todayIso();
+      setValue(m ? String(metricValueAt(m, d)) : '');
+      setDate(d);
       setNote('');
     }
-  }, [open, metricId, goal]);
+  }, [open, metricId, goal, initialDate]);
   const metric = goal.metrics.find((m) => m.id === mid);
   return (
     <FormDialog
@@ -208,7 +223,7 @@ export function LogMetricDialog({
             <Select value={mid} onValueChange={(v) => {
               setMid(v);
               const m = goal.metrics.find((x) => x.id === v);
-              if (m) setValue(String(metricValueAt(m)));
+              if (m) setValue(String(metricValueAt(m, date)));
             }}>
               <SelectTrigger data-testid="select-log-metric"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -219,13 +234,14 @@ export function LogMetricDialog({
             </Select>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={`Current value${metric?.unit ? ` (${metric.unit})` : ''}`} htmlFor="log-value" hint={metric ? `Target ${formatValue(metric.target, metric.unit)}` : undefined}>
+            <Field label={`${isRecurring(metric) ? (metric?.frequency === 'weekly' ? 'Total so far this week' : 'Total so far this month') : 'Current value'}${metric?.unit ? ` (${metric.unit})` : ''}`} htmlFor="log-value" hint={metric ? `Target ${formatValue(measurementTargetAt(metric, date), metric.unit)}${isRecurring(metric) ? (metric.frequency === 'weekly' ? ' per week' : ' per month') : ''}` : undefined}>
               <Input id="log-value" autoFocus type="number" step="any" value={value} onChange={(e) => setValue(e.target.value)} data-testid="input-log-value" />
             </Field>
             <Field label="As of" htmlFor="log-date">
               <Input id="log-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-log-date" />
             </Field>
           </div>
+          {isRecurring(metric) && <PeriodCreditHint metric={metric} date={date} verb="A period-to-date total for" />}
           <Field label="Note (optional)" htmlFor="log-note">
             <Input id="log-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What caused the change?" data-testid="input-log-note" />
           </Field>

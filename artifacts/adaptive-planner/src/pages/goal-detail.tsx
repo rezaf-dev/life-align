@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   CalendarClock,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   GitFork,
   LineChart,
   MoreHorizontal,
@@ -54,7 +56,8 @@ import {
   splitGoal,
   toggleMilestone,
 } from '@/lib/store/actions';
-import { formatValue, goalExecution, goalHealth, metricProgress, metricTimeline, metricValueAt } from '@/lib/store/selectors';
+import { formatValue, goalExecution, goalHealth, measurementBaseline, measurementPeriod, measurementPeriods, measurementTargetAt, metricProgress, metricTimeline, metricValueAt } from '@/lib/store/selectors';
+import { FrequencySelect, PeriodTag, formatPeriod, frequencyNoun, isRecurring, periodLabel, type Frequency } from '@/components/measurement-period';
 import { ContributionChips, MetricAttribution, MetricEntryRow, RecordResultDialog, type RecordResultTarget } from '@/components/contributions';
 import { useAppState } from '@/lib/store/store';
 import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
@@ -73,7 +76,7 @@ type DialogKind =
   | { status: GoalStatus }
   | { reschedule: string }
   | { deleteMs: string }
-  | { log: string | undefined }
+  | { log: string | undefined; date?: string }
   | { metricTarget: string }
   | { deleteMetric: string }
   | { record: RecordResultTarget };
@@ -178,7 +181,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       {/* Fact strip */}
       <div className="rise mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-border md:grid-cols-4">
         <Fact label="Target date" value={fmt(goal.targetDate, 'MMM d, yyyy')} sub={daysLeft >= 0 ? `${daysLeft} days left` : `${-daysLeft} days past`} onClick={() => setDialog('target')} testId="fact-target" />
-        <Fact label="Result" value={h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'Not measured'} sub={h.metric ? `of ${formatValue(h.metric.target, h.metric.unit)} · ${h.metric.name}` : 'Add a result measure'} />
+        <Fact label="Result" value={h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'Not measured'} sub={h.metric ? `of ${formatValue(h.metric.target, h.metric.unit)}${isRecurring(h.metric) ? ` ${frequencyNoun(h.metric.frequency)}, ${periodLabel(h.metric, undefined, false)?.toLowerCase()}` : ''} · ${h.metric.name}` : 'Add a result measure'} />
         <Fact label="Tasks done, 30 days" value={`${ex.done}`} sub={`${ex.open} still open`} />
         <div className="bg-card p-3 sm:p-4">
           <div className="mb-1 text-xs text-muted-foreground" title="Compares your logged result with an even pace to the target date. A reference, not a forecast.">Pace</div>
@@ -314,7 +317,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
                         <div className="mb-3 text-sm font-medium">{grp.label} <span className="font-normal text-muted-foreground">&middot; {grp.hint}</span></div>
                         <div className="space-y-5">
                           {grp.list.map((m) => (
-                            <MetricBlock key={m.id} goal={goal} metric={m} onRecord={(entryId) => setDialog({ record: { metricId: m.id, entryId } })} onLog={() => setDialog({ log: m.id })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
+                            <MetricBlock key={m.id} goal={goal} metric={m} onRecord={(entryId, date) => setDialog({ record: { metricId: m.id, entryId, date } })} onLog={(date) => setDialog({ log: m.id, date })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
                           ))}
                         </div>
                       </div>
@@ -378,7 +381,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       <MilestoneDialog goal={goal} open={dialog === 'milestone'} onClose={close} />
       <MetricDialog goal={goal} open={dialog === 'metric'} onClose={close} />
       {typeof dialog === 'object' && dialog && 'log' in dialog && (
-        <LogMetricDialog goal={goal} metricId={dialog.log} open onOpenChange={(o) => !o && close()} />
+        <LogMetricDialog goal={goal} metricId={dialog.log} initialDate={dialog.date} open onOpenChange={(o) => !o && close()} />
       )}
       {typeof dialog === 'object' && dialog && 'metricTarget' in dialog && (
         <MetricTargetDialog goal={goal} metricId={dialog.metricTarget} onClose={close} />
@@ -433,27 +436,51 @@ function Fact({ label, value, sub, onClick, testId }: { label: string; value: st
   );
 }
 
-function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onRecord: (entryId?: string) => void; onLog: () => void; onTarget: () => void; onDelete: () => void }) {
+function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onRecord: (entryId?: string, date?: string) => void; onLog: (date?: string) => void; onTarget: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const timeline = metricTimeline(metric);
+  const [viewAt, setViewAt] = useState<string | null>(null);
+  const today = todayIso();
+  const recurring = isRecurring(metric);
+  const current = recurring ? measurementPeriod(metric) : null;
+  const viewing = recurring ? measurementPeriod(metric, viewAt ?? today) : null;
+  const isHistorical = !!viewing && !!current && viewing.start !== current.start;
+  /** Historical period: its end. Current period: today, never a future end. */
+  const at = isHistorical && viewing ? viewing.end : recurring ? today : undefined;
+  const periods = recurring ? measurementPeriods(metric) : [];
+  const go = (dir: -1 | 1) => {
+    if (!viewing) return;
+    const next = measurementPeriod(metric, addDaysIso(dir < 0 ? viewing.start : viewing.end, dir));
+    if (!next || !current || next.start >= current.start) setViewAt(null);
+    else setViewAt(next.end);
+  };
+  const base = measurementBaseline(metric);
+  const target = measurementTargetAt(metric, at);
+  const timeline = metricTimeline(metric, at);
   const entries = [...timeline].reverse();
   const values = timeline.map((p) => p.value);
-  const lo = Math.min(metric.baseline, ...values, metric.target);
-  const hi = Math.max(metric.baseline, ...values, metric.target);
+  const lo = Math.min(base, ...values, target);
+  const hi = Math.max(base, ...values, target);
   const pts = timeline.map((p, i) => {
     const x = timeline.length === 1 ? 50 : (i / (timeline.length - 1)) * 100;
     const y = hi === lo ? 50 : 100 - ((p.value - lo) / (hi - lo)) * 100;
     return `${x},${y}`;
   });
-  const targetY = hi === lo ? 0 : 100 - ((metric.target - lo) / (hi - lo)) * 100;
+  const targetY = hi === lo ? 0 : 100 - ((target - lo) / (hi - lo)) * 100;
+  const value = metricValueAt(metric, at);
+  const progress = metricProgress(metric, at);
+  const remaining = Math.max(0, target - value);
+  const pct = Math.round(progress * 1000) / 10;
   return (
     <div className="min-w-0 w-full max-w-full" data-testid={`metric-${metric.id}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 break-words">
-          <div className="text-sm font-medium">{metric.name}</div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+            {metric.name}
+            {recurring && <span className="text-xs font-normal text-muted-foreground">target {frequencyNoun(metric.frequency)}</span>}
+          </div>
           <div className="font-num text-[1.35rem] leading-tight" data-testid={`text-metric-value-${metric.id}`}>
-            {formatValue(metricValueAt(metric), metric.unit)}
-            <span className="text-sm text-muted-foreground"> / {formatValue(metric.target, metric.unit)}</span>
+            {formatValue(value, metric.unit)}
+            <span className="text-sm text-muted-foreground"> / {formatValue(target, metric.unit)}</span>
           </div>
         </div>
         {timeline.length > 1 && (
@@ -463,20 +490,56 @@ function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { go
           </svg>
         )}
       </div>
-      <PaceBar progress={metricProgress(metric)} area={goal.area} className="mt-2" />
-      <MetricAttribution goal={goal} metric={metric} />
+
+      {recurring && viewing && (
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-border/80 p-2" data-testid={`period-nav-${metric.id}`}>
+          <div className="flex min-w-0 items-center gap-1">
+            <Button size="icon" variant="ghost" className="size-9 shrink-0 sm:size-8" onClick={() => go(-1)} aria-label="Previous period" data-testid={`button-period-prev-${metric.id}`}><ChevronLeft /></Button>
+            <div className="min-w-0 flex-1 text-center">
+              <div className="truncate text-xs font-medium" data-testid={`text-period-label-${metric.id}`}>{periodLabel(metric, at)}</div>
+              <div className="font-num text-[0.7rem] text-muted-foreground" data-testid={`text-period-summary-${metric.id}`}>
+                {remaining > 0 ? `${formatValue(remaining, metric.unit)} to go` : 'Target met'} &middot; {pct}%
+              </div>
+            </div>
+            <Button size="icon" variant="ghost" className="size-9 shrink-0 sm:size-8" onClick={() => go(1)} disabled={!isHistorical} aria-label="Next period" data-testid={`button-period-next-${metric.id}`}><ChevronRight /></Button>
+          </div>
+          {periods.length > 1 && (
+            <Select value={periods.some((p) => p.start === viewing.start) ? viewing.start : ''} onValueChange={(v) => { const p = periods.find((x) => x.start === v); setViewAt(!p || p.start === current?.start ? null : p.end); }}>
+              <SelectTrigger className="h-9 min-w-0 text-xs" data-testid={`select-period-${metric.id}`}><SelectValue placeholder="Jump to a recorded period" /></SelectTrigger>
+              <SelectContent>
+                {periods.map((p) => {
+                  const end = p.start === current?.start ? today : p.end;
+                  return (
+                    <SelectItem key={p.start} value={p.start}>
+                      {formatPeriod(p, metric.frequency)}{p.start === current?.start ? ' (now)' : ''} &middot; {formatValue(metricValueAt(metric, end), metric.unit)} / {formatValue(measurementTargetAt(metric, end), metric.unit)}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
+          {isHistorical && (
+            <p className="text-[0.7rem] leading-snug text-muted-foreground">
+              Viewing a past {metric.frequency === 'weekly' ? 'week' : 'month'}. New entries from here are dated {fmt(viewing.end, 'MMM d')} so they land in this period. <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => setViewAt(null)} data-testid={`button-period-current-${metric.id}`}>Back to now</button>
+            </p>
+          )}
+        </div>
+      )}
+
+      <PaceBar progress={progress} area={goal.area} className="mt-2" />
+      <MetricAttribution goal={goal} metric={metric} at={at} />
       <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onRecord()} data-testid={`button-record-${metric.id}`}><TrendingUp /> Contribution</Button>
-        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onLog} data-testid={`button-log-${metric.id}`}><LineChart /> Log current value</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onRecord(undefined, isHistorical ? at : undefined)} data-testid={`button-record-${metric.id}`}><TrendingUp /> Contribution</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onLog(isHistorical ? at : undefined)} data-testid={`button-log-${metric.id}`}><LineChart /> {recurring ? 'Log period total' : 'Log current value'}</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onTarget} data-testid={`button-target-${metric.id}`}><Target /> Target</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} data-testid={`button-entries-${metric.id}`}>
-          {metric.entries.length} entries <ChevronDown className={cn('transition-transform', expanded && 'rotate-180')} />
+          {timeline.length} {recurring ? 'in period' : 'entries'} <ChevronDown className={cn('transition-transform', expanded && 'rotate-180')} />
         </Button>
         <Button size="sm" variant="ghost" className="ml-auto h-9 px-2 text-muted-foreground sm:h-8" onClick={onDelete} aria-label={`Remove ${metric.name}`} data-testid={`button-delete-metric-${metric.id}`}><Trash2 /></Button>
       </div>
       {expanded && (
-        <ul className="mt-2 space-y-0.5 rounded-lg bg-muted/50 p-2" data-testid={`list-entries-${metric.id}`}>
-          {entries.length === 0 && <li className="px-1 text-xs text-muted-foreground">Nothing logged yet. Baseline {formatValue(metric.baseline, metric.unit)}.</li>}
+        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-0.5 rounded-lg bg-muted/50 p-2 [&>li]:min-w-0" data-testid={`list-entries-${metric.id}`}>
+          {entries.length === 0 && <li className="px-1 text-xs text-muted-foreground">{recurring ? `Nothing logged in this period. It counts as ${formatValue(0, metric.unit)}.` : `Nothing logged yet. Baseline ${formatValue(metric.baseline, metric.unit)}.`}</li>}
           {entries.map(({ entry }) => (
             <MetricEntryRow key={entry.id} goal={goal} metric={metric} entry={entry} onEdit={() => onRecord(entry.id)} />
           ))}
@@ -571,18 +634,27 @@ function MilestoneDialog({ goal, open, onClose }: { goal: Goal; open: boolean; o
 }
 
 function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onClose: () => void }) {
-  const init = { name: '', unit: '', baseline: '0', target: '', kind: 'outcome' as MetricKind };
+  const init = { name: '', unit: '', baseline: '0', target: '', kind: 'outcome' as MetricKind, frequency: 'cumulative' as Frequency };
   const [f, setF] = useState(init);
   const [lastOpen, setLastOpen] = useState(false);
+  const { toast } = useToast();
   if (open !== lastOpen) {
     setLastOpen(open);
     if (open) setF(init);
   }
-  const ok = !!f.name.trim() && f.target !== '' && !Number.isNaN(Number(f.target)) && !Number.isNaN(Number(f.baseline));
+  const recurring = f.frequency !== 'cumulative';
+  const ok = !!f.name.trim() && f.target !== '' && !Number.isNaN(Number(f.target)) && !Number.isNaN(Number(f.baseline)) && (!recurring || Number(f.target) > 0);
   return (
     <FormDialog open={open} onOpenChange={(o) => !o && onClose()} title="Add metric" description="Outcomes prove the goal is working. Activity measures track effort you control." canSubmit={ok}
-      onSubmit={() => { addMetric(goal.id, { name: f.name.trim(), unit: f.unit.trim(), baseline: Number(f.baseline) || 0, target: Number(f.target), kind: f.kind }); onClose(); }}>
-      <Field label="Name" htmlFor="mt-name"><Input id="mt-name" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} data-testid="input-metric-name" /></Field>
+      onSubmit={() => {
+        try {
+          addMetric(goal.id, { name: f.name.trim(), unit: f.unit.trim(), baseline: recurring ? 0 : Number(f.baseline) || 0, target: Number(f.target), kind: f.kind, frequency: f.frequency });
+          onClose();
+        } catch (err) {
+          toast({ variant: 'destructive', title: 'Metric not added', description: err instanceof Error ? err.message : 'Check the values and try again.' });
+        }
+      }}>
+      <Field label="Name" htmlFor="mt-name"><Input id="mt-name" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={recurring ? 'Deep work hours' : undefined} data-testid="input-metric-name" /></Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Type">
           <Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v as MetricKind })}>
@@ -593,9 +665,14 @@ function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onCl
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Unit" htmlFor="mt-unit"><Input id="mt-unit" value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} placeholder="$, kg, sessions" data-testid="input-metric-unit" /></Field>
-        <Field label="Starting value" htmlFor="mt-base"><Input id="mt-base" type="number" step="any" value={f.baseline} onChange={(e) => setF({ ...f, baseline: e.target.value })} data-testid="input-metric-baseline" /></Field>
-        <Field label="Target" htmlFor="mt-target"><Input id="mt-target" type="number" step="any" value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} data-testid="input-metric-target" /></Field>
+        <Field label="Measured" hint={recurring ? 'Starts at 0 every period. No carryover.' : 'One running total.'}>
+          <FrequencySelect value={f.frequency} onChange={(v) => setF({ ...f, frequency: v })} testId="select-metric-frequency" />
+        </Field>
+        <Field label="Unit" htmlFor="mt-unit"><Input id="mt-unit" value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} placeholder="$, kg, hours" data-testid="input-metric-unit" /></Field>
+        {!recurring && <Field label="Starting value" htmlFor="mt-base"><Input id="mt-base" type="number" step="any" value={f.baseline} onChange={(e) => setF({ ...f, baseline: e.target.value })} data-testid="input-metric-baseline" /></Field>}
+        <Field label={recurring ? `Target ${frequencyNoun(f.frequency)}` : 'Target'} htmlFor="mt-target" hint={recurring && f.target !== '' && Number(f.target) <= 0 ? 'Use a positive target' : recurring ? 'e.g. 30 hours each month' : undefined}>
+          <Input id="mt-target" type="number" step="any" min={recurring ? 0 : undefined} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} data-testid="input-metric-target" />
+        </Field>
       </div>
     </FormDialog>
   );
@@ -603,15 +680,41 @@ function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onCl
 
 function MetricTargetDialog({ goal, metricId, onClose }: { goal: Goal; metricId: string; onClose: () => void }) {
   const m = goal.metrics.find((x) => x.id === metricId);
+  const { toast } = useToast();
   const [target, setTarget] = useState(String(m?.target ?? ''));
+  const [frequency, setFrequency] = useState<Frequency>(m?.frequency ?? 'cumulative');
   const [reason, setReason] = useState('');
   if (!m) return null;
+  const locked = m.entries.length > 0;
+  const curFreq = m.frequency ?? 'cumulative';
+  const recurring = frequency !== 'cumulative';
+  const n = Number(target);
+  const changed = n !== m.target || frequency !== curFreq;
+  const valid = target !== '' && !Number.isNaN(n) && (!recurring || n > 0);
   return (
-    <FormDialog open onOpenChange={(o) => !o && onClose()} title={`Change target: ${m.name}`} description={`Currently ${formatValue(m.target, m.unit)}. The change and reason are recorded.`}
-      canSubmit={target !== '' && !Number.isNaN(Number(target)) && Number(target) !== m.target && !!reason.trim()}
-      onSubmit={() => { changeMetricTarget(goal.id, m.id, Number(target), reason.trim()); onClose(); }}>
-      <Field label="New target" htmlFor="tg-val"><Input id="tg-val" type="number" step="any" autoFocus value={target} onChange={(e) => setTarget(e.target.value)} data-testid="input-metric-new-target" /></Field>
+    <FormDialog open onOpenChange={(o) => !o && onClose()} title={`Change target: ${m.name}`} description={`Currently ${formatValue(m.target, m.unit)} ${frequencyNoun(curFreq)}. The change and reason are recorded.${isRecurring(m) ? ' A new target applies from this period onward; past periods keep their old targets.' : ''}`}
+      canSubmit={valid && changed && !!reason.trim()}
+      onSubmit={() => {
+        try {
+          changeMetricTarget(goal.id, m.id, n, reason.trim(), locked ? undefined : frequency);
+          onClose();
+        } catch (err) {
+          toast({ variant: 'destructive', title: 'Target not changed', description: err instanceof Error ? err.message : 'Check the values and try again.' });
+        }
+      }}>
+      <Field label="Measured">
+        <FrequencySelect value={frequency} onChange={setFrequency} disabled={locked} testId="select-metric-target-frequency" />
+      </Field>
+      {locked && (
+        <p className="-mt-2 text-xs text-muted-foreground" data-testid="text-frequency-locked">
+          Cadence is locked because this metric already has {m.entries.length} {m.entries.length === 1 ? 'entry' : 'entries'}. To measure on a different cadence, add a new measure; this one keeps its history intact.
+        </p>
+      )}
+      <Field label={recurring ? `New target ${frequencyNoun(frequency)}` : 'New target'} htmlFor="tg-val" hint={recurring ? 'Positive; each period starts at 0.' : undefined}>
+        <Input id="tg-val" type="number" step="any" autoFocus value={target} onChange={(e) => setTarget(e.target.value)} data-testid="input-metric-new-target" />
+      </Field>
       <Field label="Reason (required)" htmlFor="tg-reason"><Input id="tg-reason" value={reason} onChange={(e) => setReason(e.target.value)} data-testid="input-metric-target-reason" /></Field>
+      {recurring && <PeriodTag metric={{ frequency }} className="self-start" />}
     </FormDialog>
   );
 }

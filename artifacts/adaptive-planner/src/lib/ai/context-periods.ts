@@ -1,6 +1,6 @@
 import { addDaysIso, addMonthsIso, monthEndIso, monthStartIso, weekStartIso } from '@/lib/dates';
 import type { AppState } from '@/lib/store/types';
-import { metricValueAt } from '@/lib/store/selectors';
+import { metricValueAt, measurementPeriod, measurementPeriods, measurementTargetAt } from '@/lib/store/selectors';
 
 /** Retrieve period aggregates locally rather than uploading every historical record. */
 export function periodContext(state: AppState, message: string, today: string) {
@@ -51,8 +51,15 @@ export function periodContext(state: AppState, message: string, today: string) {
         completedActions: completed.filter((t) => t.goalId === g.id).length,
         metrics: g.metrics.map((m) => {
           const within = m.entries.filter((e) => e.date >= start && e.date <= end).sort((a, b) => a.date.localeCompare(b.date));
-          return { id: m.id, name: m.name, unit: m.unit, kind: m.kind, startValue: metricValueAt(m, addDaysIso(start, -1)),
-            lastRecordedInPeriod: within.length ? metricValueAt(m, end) : null, measurementsInPeriod: within.length, target: m.target,
+          const period = measurementPeriod(m, end);
+          const before = addDaysIso(start, -1);
+          return { id: m.id, name: m.name, unit: m.unit, kind: m.kind,
+            frequency: m.frequency ?? 'cumulative', period,
+            periods: period ? measurementPeriods(m, end).filter((p) => p.end >= start && p.start <= end).map((p) => ({
+              ...p, value: metricValueAt(m, p.end < end ? p.end : end), target: measurementTargetAt(m, p.end < end ? p.end : end),
+            })) : undefined,
+            startValue: period && before < period.start ? 0 : metricValueAt(m, before),
+            lastRecordedInPeriod: within.length ? metricValueAt(m, end) : null, measurementsInPeriod: within.length, target: measurementTargetAt(m, end),
             attributedResults: within.filter((e) => e.mode === 'contribution').map((e) => ({ change: e.value, source: e.source, date: e.date })),
           };
         }),

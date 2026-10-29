@@ -238,6 +238,7 @@ components:
         kind: { type: string, enum: [outcome, leading] }
         baseline: { type: number }
         target: { type: number }
+        frequency: { type: string, enum: [cumulative, weekly, monthly] }
         value: { type: number }
         date: { type: string }
         reviewType: { type: string, enum: [weekly, monthly] }

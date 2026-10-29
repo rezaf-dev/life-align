@@ -17,6 +17,7 @@ import { generateInsights } from '@/lib/store/insights';
 import { computeSnapshot, formatValue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import type { ReviewAnswers, ReviewSnapshot } from '@/lib/store/types';
+import { formatPeriod } from '@/components/measurement-period';
 import { setNavGuard } from '@/lib/nav-guard';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
@@ -148,7 +149,7 @@ function MetricList({ list }: { list: ReviewSnapshot['metrics'] }) {
           <ul>
             {ms.map((m) => (
               <li key={m.metricId} className="flex items-baseline justify-between gap-3 py-0.5 text-sm">
-                <span className="min-w-0">{m.name}</span>
+                <span className="min-w-0">{m.name}{m.frequency && m.frequency !== 'cumulative' && m.periodStart && m.periodEnd && <span className="text-xs text-muted-foreground"> &middot; {formatPeriod({ start: m.periodStart, end: m.periodEnd }, m.frequency)}</span>}{m.frequency && m.frequency !== 'cumulative' && !m.periodStart && <span className="text-xs text-muted-foreground"> &middot; {m.frequency}</span>}</span>
                 <span className="shrink-0 font-num">{formatValue(m.value, m.unit)} <span className="text-muted-foreground">/ {formatValue(m.target, m.unit)}</span></span>
               </li>
             ))}

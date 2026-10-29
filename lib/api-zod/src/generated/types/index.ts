@@ -16,6 +16,7 @@ export * from './aiMessage';
 export * from './aiMessageRole';
 export * from './aiOperation';
 export * from './aiOperationArea';
+export * from './aiOperationFrequency';
 export * from './aiOperationKind';
 export * from './aiOperationPriority';
 export * from './aiOperationRecurrence';

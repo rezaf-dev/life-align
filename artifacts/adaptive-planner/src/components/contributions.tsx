@@ -8,9 +8,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, FormDialog } from '@/components/form-dialog';
 import { fmt, todayIso } from '@/lib/dates';
 import { deleteMetricEntry, editContribution, recordContribution } from '@/lib/store/actions';
-import { contributionAmount, contributionPercent, formatValue } from '@/lib/store/selectors';
+import { contributionAmount, contributionPercent, formatValue, measurementEntries } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import type { Goal, Metric, MetricEntry } from '@/lib/store/types';
+import { PeriodCreditHint, PeriodTag, isRecurring } from '@/components/measurement-period';
 import { flushWorkspace } from '@/lib/workspace-sync';
 import { cn } from '@/lib/utils';
 
@@ -27,8 +28,8 @@ export function formatDelta(v: number, unit: string) {
 }
 
 /** Share of baseline→target span, already direction-aware (favorable = positive). */
-export function formatShare(metric: Metric, amount: number) {
-  const p = contributionPercent(metric, amount);
+export function formatShare(metric: Metric, amount: number, at?: string) {
+  const p = contributionPercent(metric, amount, at);
   if (p === null || !Number.isFinite(p)) return null;
   const r = Math.abs(p) >= 10 ? Math.round(p) : Math.round(p * 10) / 10;
   return `${r > 0 ? '+' : r < 0 ? '\u2212' : ''}${Math.abs(r)}% of required change`;
@@ -54,6 +55,8 @@ export type RecordResultTarget = {
   milestoneId?: string;
   /** Edit mode: amount/date/note only, source is retained. */
   entryId?: string;
+  /** Prefill date, e.g. the end of a historical period being viewed (clamped to today). */
+  date?: string;
 };
 
 export function RecordResultDialog({
@@ -89,17 +92,22 @@ export function RecordResultDialog({
 
   useEffect(() => {
     if (!open) return;
+    // A retry's staged entry belongs only to that open form. Never use it to
+    // initialize a newly opened result, including a different historical period.
+    const initialEntry = target?.entryId
+      ? goal.metrics.find((m) => m.id === target.metricId)?.entries.find((e) => e.id === target.entryId)
+      : undefined;
     setMid(target?.metricId ?? goal.metrics[0]?.id ?? '');
     setKind(target?.milestoneId && !target?.taskId ? 'milestone' : 'task');
     setTaskId(target?.taskId ?? '');
     setMsId(target?.milestoneId ?? '');
-    setAmount(editing ? String(editing.value) : '');
-    setDate(editing?.date ?? todayIso());
-    setNote(editing?.note ?? '');
+    setAmount(initialEntry ? String(initialEntry.value) : '');
+    setDate(initialEntry?.date ?? (target?.date && target.date < todayIso() ? target.date : todayIso()));
+    setNote(initialEntry?.note ?? '');
     setPending(false);
     setStaged(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, target?.metricId, target?.taskId, target?.milestoneId, target?.entryId]);
+  }, [open, target?.metricId, target?.taskId, target?.milestoneId, target?.entryId, target?.date]);
 
   const metric = goal.metrics.find((m) => m.id === mid);
   const goalTasks = tasks.filter((t) => t.goalId === goal.id && (!t.archived || t.id === taskId));
@@ -108,7 +116,7 @@ export function RecordResultDialog({
   const amountOk = amount.trim() !== '' && Number.isFinite(n) && n !== 0;
   const sourceOk = !!editing || (kind === 'task' ? !!pickedTask : goal.milestones.some((m) => m.id === msId));
   const dateOk = !!date && date <= today;
-  const share = metric && amountOk ? formatShare(metric, n) : null;
+  const share = metric && amountOk ? formatShare(metric, n, date) : null;
   const lockedSource = !!editing || !!target?.taskId || !!target?.milestoneId;
 
   const submit = async () => {
@@ -240,6 +248,7 @@ export function RecordResultDialog({
           <Input id="contribution-date" disabled={pending} type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-contribution-date" />
         </Field>
       </div>
+      {dateOk && <PeriodCreditHint metric={metric} date={date} verb="Credits" />}
       <Field label="Note (optional)" htmlFor="contribution-note">
         <Input id="contribution-note" disabled={pending} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What happened?" data-testid="input-contribution-note" />
       </Field>
@@ -249,28 +258,28 @@ export function RecordResultDialog({
 
 /* ---------- Results tab: per-metric attribution ---------- */
 
-export function MetricAttribution({ goal, metric }: { goal: Goal; metric: Metric }) {
+export function MetricAttribution({ goal, metric, at }: { goal: Goal; metric: Metric; at?: string }) {
   const { tasks } = useAppState();
-  const contribs = metric.entries.filter(isContribution);
-  const total = contributionAmount(metric);
+  const contribs = measurementEntries(metric, at).filter(isContribution);
+  const total = contributionAmount(metric, undefined, at);
   if (!contribs.length) {
     return (
       <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-attribution-empty-${metric.id}`}>
-        No contributions credited yet.
+        No contributions credited{isRecurring(metric) ? ' in this period' : ''} yet.
       </p>
     );
   }
   const taskIds = [...new Set(contribs.map((e) => e.source?.taskId).filter(Boolean) as string[])];
   const msIds = [...new Set(contribs.flatMap((e) => [e.source?.milestoneId]).filter(Boolean) as string[])];
   const rows = [
-    ...msIds.map((id) => ({ key: `m-${id}`, kind: 'Milestone', name: goal.milestones.find((m) => m.id === id)?.title ?? contribs.find((e) => e.source?.milestoneId === id)?.source?.milestoneTitle ?? 'Removed milestone', amt: contributionAmount(metric, { milestoneId: id }) })),
-    ...taskIds.map((id) => ({ key: `t-${id}`, kind: 'Task', name: tasks.find((t) => t.id === id)?.title ?? contribs.find((e) => e.source?.taskId === id)?.source?.taskTitle ?? 'Removed task', amt: contributionAmount(metric, { taskId: id }) })),
+    ...msIds.map((id) => ({ key: `m-${id}`, kind: 'Milestone', name: goal.milestones.find((m) => m.id === id)?.title ?? contribs.find((e) => e.source?.milestoneId === id)?.source?.milestoneTitle ?? 'Removed milestone', amt: contributionAmount(metric, { milestoneId: id }, at) })),
+    ...taskIds.map((id) => ({ key: `t-${id}`, kind: 'Task', name: tasks.find((t) => t.id === id)?.title ?? contribs.find((e) => e.source?.taskId === id)?.source?.taskTitle ?? 'Removed task', amt: contributionAmount(metric, { taskId: id }, at) })),
   ];
-  const share = formatShare(metric, total);
+  const share = formatShare(metric, total, at);
   return (
     <div className="mt-3 rounded-lg border border-border/80 p-2.5" data-testid={`attribution-${metric.id}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
-        <span className="text-muted-foreground">Recorded contribution</span>
+        <span className="text-muted-foreground">Recorded contribution {isRecurring(metric) && <PeriodTag metric={metric} at={at} className="ml-1" />}</span>
         <span className="font-num text-sm" data-testid={`text-attribution-total-${metric.id}`}>
           {formatDelta(total, metric.unit)}{share && <span className="text-muted-foreground"> · {share}</span>}
         </span>
@@ -281,7 +290,7 @@ export function MetricAttribution({ goal, metric }: { goal: Goal; metric: Metric
             <span className="w-16 shrink-0 text-muted-foreground">{r.kind}</span>
             <span className="min-w-0 flex-1 truncate">{r.name}</span>
             <span className={cn('font-num', !favorable(metric, r.amt) && r.amt !== 0 && 'text-destructive')}>{formatDelta(r.amt, metric.unit)}</span>
-            <span className="hidden w-24 text-right font-num text-muted-foreground sm:inline">{formatShare(metric, r.amt) ?? ''}</span>
+            <span className="hidden w-24 text-right font-num text-muted-foreground sm:inline">{formatShare(metric, r.amt, at) ?? ''}</span>
           </li>
         ))}
       </ul>
@@ -362,6 +371,7 @@ export function ContributionChips({ goal, filter, testId }: { goal?: Goal; filte
             <TrendingUp className="size-3" />
             {formatDelta(amt, m.unit)} {m.name.toLowerCase()}
             {share && <span className="text-muted-foreground">({share})</span>}
+            {isRecurring(m) && <span className="text-muted-foreground">{m.frequency === 'weekly' ? 'this week' : 'this month'}</span>}
           </span>
         );
       })}
@@ -384,7 +394,7 @@ export function TaskContributionSection({ goal, taskId, onRecord }: { goal?: Goa
           <ul className="space-y-1">
             {list.map(({ m, amt }) => (
               <li key={m.id} className="flex items-baseline justify-between gap-3 text-sm" data-testid={`text-task-contribution-${m.id}`}>
-                <span className="truncate">{m.name}</span>
+                <span className="truncate">{m.name}{isRecurring(m) && <span className="text-xs text-muted-foreground"> &middot; {m.frequency === 'weekly' ? 'this week' : 'this month'}</span>}</span>
                 <span className="font-num">{formatDelta(amt, m.unit)} <span className="text-xs text-muted-foreground">{formatShare(m, amt) ?? ''}</span></span>
               </li>
             ))}

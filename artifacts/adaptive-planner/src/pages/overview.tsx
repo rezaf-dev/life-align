@@ -20,6 +20,7 @@ import {
   plannedOn,
   tasksInRange,
 } from '@/lib/store/selectors';
+import { isRecurring } from '@/components/measurement-period';
 import { useAppState } from '@/lib/store/store';
 import type { Goal } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
@@ -279,7 +280,7 @@ export default function OverviewPage() {
                       <div className="mt-2 flex items-center gap-3">
                         <PaceBar progress={h.progress} expected={h.expected} area={g.area} className="flex-1" />
                         <span className="shrink-0 text-right font-num text-xs">
-                          {h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'No result yet'}
+                          {h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'No result yet'}{h.metric && isRecurring(h.metric) && <span className="text-muted-foreground"> {h.metric.frequency === 'weekly' ? 'this week' : 'this month'}</span>}
                           {h.metric && <span className="text-muted-foreground"> / {formatValue(h.metric.target, h.metric.unit)}</span>}
                         </span>
                       </div>

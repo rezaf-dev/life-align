@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AiOperationArea } from './aiOperationArea';
+import type { AiOperationFrequency } from './aiOperationFrequency';
 import type { AiOperationKind } from './aiOperationKind';
 import type { AiOperationPriority } from './aiOperationPriority';
 import type { AiOperationRecurrence } from './aiOperationRecurrence';
@@ -66,6 +67,7 @@ export interface AiOperation {
   kind?: AiOperationKind;
   baseline?: number;
   target?: number;
+  frequency?: AiOperationFrequency;
   value?: number;
   date?: string;
   reviewType?: AiOperationReviewType;

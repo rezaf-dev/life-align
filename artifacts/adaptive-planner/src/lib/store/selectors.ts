@@ -1,7 +1,7 @@
 import { addDaysIso, daysBetween, todayIso } from '@/lib/dates';
 import type { AppState, Goal, Metric, ReviewSnapshot, Task } from './types';
-import { measurementValueAt } from '@workspace/api-zod';
-export { measurementTimeline as metricTimeline, contributionAmount, contributionPercent } from '@workspace/api-zod';
+import { measurementValueAt, measurementBaseline, measurementPeriod, measurementTargetAt } from '@workspace/api-zod';
+export { measurementTimeline as metricTimeline, contributionAmount, contributionPercent, measurementPeriod, measurementPeriods, measurementEntries, measurementBaseline, measurementTargetAt } from '@workspace/api-zod';
 
 export const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
 
@@ -9,10 +9,11 @@ export function metricValueAt(m: Metric, at?: string) {
   return measurementValueAt(m, at);
 }
 
-export function metricProgress(m: Metric) {
-  const span = m.target - m.baseline;
+export function metricProgress(m: Metric, at?: string) {
+  const baseline = measurementBaseline(m);
+  const span = measurementTargetAt(m, at) - baseline;
   if (span === 0) return 1;
-  return clamp((metricValueAt(m) - m.baseline) / span);
+  return clamp((metricValueAt(m, at) - baseline) / span);
 }
 
 export function lastEntryDate(m: Metric) {
@@ -31,11 +32,13 @@ export function goalHealth(g: Goal, t = todayIso()) {
   const total = Math.max(1, daysBetween(start, g.targetDate));
   const expected = clamp(daysBetween(start, t) / total);
   if (!m) return { status: 'no-data' as Health, progress: 0, expected, metric: undefined };
-  const progress = metricProgress(m);
-  const gap = progress - expected;
+  const period = measurementPeriod(m, t);
+  const periodExpected = period ? clamp((daysBetween(period.start, t) + 1) / (daysBetween(period.start, period.end) + 1)) : expected;
+  const progress = metricProgress(m, t);
+  const gap = progress - periodExpected;
   const status: Health =
-    progress >= 1 ? 'achieved' : gap >= -0.1 ? 'on-track' : gap >= -0.25 ? 'watch' : 'behind';
-  return { status, progress, expected, metric: m };
+    progress >= 1 && !period ? 'achieved' : gap >= -0.1 ? 'on-track' : gap >= -0.25 ? 'watch' : 'behind';
+  return { status, progress, expected: periodExpected, metric: m };
 }
 
 export const isLive = (t: Task) => !t.archived;
@@ -123,7 +126,10 @@ export function computeSnapshot(
         unit: m.unit,
         kind: m.kind,
         value: metricValueAt(m, end),
-        target: m.target,
+        target: measurementTargetAt(m, end),
+        frequency: m.frequency,
+        periodStart: measurementPeriod(m, end)?.start,
+        periodEnd: measurementPeriod(m, end)?.end,
       })),
     );
   return { committed: committedIds.length, committedDone, extraDone, overdue, metrics };

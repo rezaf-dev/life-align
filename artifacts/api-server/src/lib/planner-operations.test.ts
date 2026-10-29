@@ -17,6 +17,37 @@ const initial: Operation[] = [
 ];
 function seed() { return applyOperations(empty(), initial, 'seed-transaction').state; }
 
+test('AI measured observations can create recurring metrics and snapshots retain their dated period', () => {
+  const state = seed();
+  const goalId = state.goals[0].id;
+  const configured = applyOperations(state, [{
+    key: 'monthly-hours', type: 'record_metric', goalId, name: 'Project hours', unit: 'hours', kind: 'leading', frequency: 'monthly',
+    baseline: 0, target: 30, value: 20, date: '2024-01-31',
+  }], 'monthly-config').state;
+  const metric = configured.goals[0].metrics.at(-1)!;
+  const feb = applyOperations(configured, [
+    { key: 'feb-hours', type: 'record_metric', goalId, metricId: metric.id, value: 6, date: '2024-02-10' },
+    { key: 'feb-review', type: 'create_review', reviewType: 'weekly', periodStart: '2024-02-05', periodEnd: '2024-02-11' },
+  ], 'monthly-review').state;
+  const snapshot = feb.reviews[0].snapshot.metrics.find((m) => m.metricId === metric.id)!;
+  assert.equal(snapshot.value, 6);
+  assert.equal(snapshot.frequency, 'monthly');
+  assert.equal(snapshot.periodStart, '2024-02-01');
+  assert.equal(snapshot.periodEnd, '2024-02-29');
+  assert.throws(() => applyOperations(feb, [
+    { key: 'unsafe-change', type: 'record_metric', goalId, metricId: metric.id, frequency: 'weekly', value: 3, date: '2024-02-11' },
+  ], 'unsafe-frequency-change'));
+});
+test('recurring metric definitions fail atomically when their period target or baseline is invalid', () => {
+  const state = seed();
+  for (const [baseline, target] of [[5, 30], [0, 0], [0, -1]]) {
+    assert.throws(() => applyOperations(state, [{
+      key: 'invalid-hours', type: 'record_metric', goalId: state.goals[0].id, name: 'Hours', frequency: 'weekly', baseline, target, value: 3, date: '2024-01-01',
+    }], `invalid-${baseline}-${target}`));
+  }
+  assert.equal(state.goals[0].metrics.length, 0);
+});
+
 test('goal, milestone, task and breakdown are created with valid relationships', () => {
   const s = seed();
   assert.equal(s.goals.length, 1);

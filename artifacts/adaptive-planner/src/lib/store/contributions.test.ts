@@ -1,8 +1,8 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyWorkspace, getState, hydrateState, setWorkspaceWriter } from './store';
-import { deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry } from './actions';
-import { contributionAmount, metricValueAt } from './selectors';
+import { deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry, addMetric, changeMetricTarget } from './actions';
+import { contributionAmount, metricValueAt, metricProgress, goalHealth, measurementTargetAt } from './selectors';
 import type { Goal, Task } from './types';
 import { applyOperations } from '../../../../api-server/src/lib/planner-operations';
 
@@ -18,6 +18,51 @@ beforeEach(() => {
   const task: Task = { id: 'task', title: 'Customer interviews', goalId: goal.id, milestoneId: 'milestone', priority: 'medium', effort: 30, notes: '', recurrence: 'none', status: 'open', archived: false, createdAt: '2024-01-01', isDemo: false };
   state.goals = [goal]; state.tasks = [task];
   hydrateState(state); setWorkspaceWriter(() => {});
+});
+
+test('recurring task results persist frequency, reset by work date, and keep task completion separate', () => {
+  addMetric('goal', { name: 'Project hours', unit: 'hours', kind: 'leading', frequency: 'monthly', baseline: 0, target: 30 });
+  const id = getState().goals[0].metrics[1].id;
+  recordContribution('goal', id, { taskId: 'task', amount: 20, date: '2024-01-31' });
+  recordContribution('goal', id, { taskId: 'task', amount: 6, date: '2024-02-01' });
+  const saved = structuredClone(getState());
+  hydrateState(saved);
+  const m = getState().goals[0].metrics[1];
+  assert.equal(m.frequency, 'monthly');
+  assert.equal(metricValueAt(m, '2024-02-29'), 6);
+  assert.equal(metricProgress(m, '2024-02-29'), 0.2);
+  assert.equal(contributionAmount(m, { milestoneId: 'milestone' }, '2024-02-29'), 6);
+  toggleTask('task');
+  assert.equal(metricValueAt(getState().goals[0].metrics[1], '2024-02-29'), 6);
+});
+test('cadence edits do not reinterpret measurements with history; invalid recurring targets cannot be saved', () => {
+  assert.throws(() => addMetric('goal', { name: 'Hours', unit: 'h', kind: 'leading', frequency: 'weekly', baseline: 1, target: 5 }));
+  assert.throws(() => addMetric('goal', { name: 'Hours', unit: 'h', kind: 'leading', frequency: 'monthly', baseline: 0, target: 0 }));
+  changeMetricTarget('goal', 'metric', 30, 'Measure monthly work', 'monthly');
+  recordContribution('goal', 'metric', { taskId: 'task', amount: 5, date: '2024-01-01' });
+  assert.throws(() => changeMetricTarget('goal', 'metric', 30, 'Switch frequency', 'weekly'));
+  assert.throws(() => changeMetricTarget('goal', 'metric', 0, 'Invalid target'));
+  assert.equal(getState().goals[0].metrics[0].frequency, 'monthly');
+});
+test('recurring goal pace uses the calendar period and never calls a whole goal achieved from hours alone', () => {
+  const g = structuredClone(getState().goals[0]);
+  g.metrics = [{ id: 'hours', name: 'Hours', unit: 'h', kind: 'leading', baseline: 0, target: 30, frequency: 'monthly', entries: [{ id: 'reading', date: '2024-01-15', value: 30 }] }];
+  assert.equal(goalHealth(g, '2024-01-15').status, 'on-track');
+  assert.equal(goalHealth(g, '2024-01-15').expected, 15 / 31);
+  assert.equal(goalHealth(g, '2024-02-01').progress, 0);
+  assert.equal(g.status, 'active');
+});
+test('target edits keep previous periods intact through server validation and account reload', () => {
+  changeMetricTarget('goal', 'metric', 30, 'Monthly hours', 'monthly');
+  recordContribution('goal', 'metric', { taskId: 'task', amount: 15, date: '2024-01-01' });
+  changeMetricTarget('goal', 'metric', 40, 'More time this month');
+  const saved = applyOperations(getState(), [{ key: 'preserve-config', type: 'update_task', taskId: 'task', notes: 'Preserve metric configuration' }], 'recurring-preservation').state;
+  hydrateState(saved);
+  const m = getState().goals[0].metrics[0];
+  assert.equal(m.frequency, 'monthly');
+  assert.equal(measurementTargetAt(m, '2024-01-31'), 30);
+  assert.equal(metricProgress(m, '2024-01-31'), 0.5);
+  assert.equal(measurementTargetAt(m), 40);
 });
 const metric = () => getState().goals[0].metrics[0];
 test('a task result is credited once to its task, milestone and goal without completing work', () => {

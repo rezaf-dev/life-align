@@ -40,6 +40,9 @@ export interface Metric {
   kind: MetricKind;
   baseline: number;
   target: number;
+  /** Missing frequency means the original cumulative measurement. */
+  frequency?: 'cumulative' | 'weekly' | 'monthly';
+  targetHistory?: { start: string; target: number }[];
   entries: MetricEntry[];
 }
 
@@ -130,6 +133,9 @@ export interface SnapshotMetric {
   kind: MetricKind;
   value: number;
   target: number;
+  frequency?: Metric['frequency'];
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 export interface ReviewSnapshot {

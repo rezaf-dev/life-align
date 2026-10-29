@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { measurementValueAt } from '@workspace/api-zod';
+import { measurementValueAt, measurementPeriod, measurementTargetAt } from '@workspace/api-zod';
 import { requireText, stateSchema, validDate, type Operation, type Workspace } from './planner-state';
 
 /** Pure transactional reducer. Nothing is persisted server-side or sent to the model here. */
@@ -205,9 +205,10 @@ export function applyOperations(raw: unknown, operations: Operation[], requestId
         if (!metric && op.metricId) throw new Error('The referenced metric no longer exists.');
         if (!metric) {
           if (op.target === undefined) throw new Error('A new metric needs a target.');
-          metric = { id: randomUUID(), name: requireText(op.name, 'Metric name'), unit: op.unit ?? '', kind: op.kind ?? 'outcome', baseline: op.baseline ?? 0, target: op.target, entries: [] };
+          metric = { id: randomUUID(), name: requireText(op.name, 'Metric name'), unit: op.unit ?? '', kind: op.kind ?? 'outcome', baseline: op.baseline ?? 0, target: op.target, frequency: op.frequency, entries: [] };
           g.metrics.push(metric);
         }
+        if (op.frequency && op.frequency !== (metric.frequency ?? 'cumulative')) throw new Error('Do not change the frequency of an existing measurement; create a separate one to preserve its history.');
         metric.entries.push({ id: randomUUID(), date: validDate(op.date, 'Measurement date', true), value: op.value, note: op.notes });
         record(g, 'metric', `Logged ${metric.name}: ${op.value} ${metric.unit}`, op);
         changes.push(`Logged result: ${metric.name}`);
@@ -237,7 +238,8 @@ export function applyOperations(raw: unknown, operations: Operation[], requestId
             extraDone: doneInPeriod.filter((t) => !committedIds.has(t.id) && !planned.some((p) => p.id === t.id)).length,
             overdue: state.tasks.filter((t) => !t.archived && t.status === 'open' && (t.dueDate ?? t.plannedDate ?? end) < end).length,
             metrics: state.goals.flatMap((g) => g.metrics.map((m) => {
-              return { goalId: g.id, goalTitle: g.title, metricId: m.id, name: m.name, unit: m.unit, kind: m.kind, value: measurementValueAt(m, end), target: m.target };
+              const period = measurementPeriod(m, end);
+              return { goalId: g.id, goalTitle: g.title, metricId: m.id, name: m.name, unit: m.unit, kind: m.kind, value: measurementValueAt(m, end), target: measurementTargetAt(m, end), frequency: m.frequency, periodStart: period?.start, periodEnd: period?.end };
             })),
           }, adjustments: [], isDemo: false,
         });
@@ -249,5 +251,5 @@ export function applyOperations(raw: unknown, operations: Operation[], requestId
   // Commit only after the entire sequence validates; IDs also make retries idempotent across reloads.
   state.aiApplied = [...(state.aiApplied ?? []), requestId];
   state.aiHistory = [...(state.aiHistory ?? []), ...changes.map((summary) => ({ at: stamp, summary }))];
-  return { state, changes, alreadyApplied: false };
+  return { state: stateSchema.parse(state), changes, alreadyApplied: false };
 }

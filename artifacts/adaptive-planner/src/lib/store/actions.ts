@@ -1,6 +1,6 @@
 import { addDaysIso, addMonthsIso, nowStamp, todayIso, uid } from '@/lib/dates';
 import { createSeed } from './seed';
-import { isMeasurementDate, measurementEntrySchema } from '@workspace/api-zod';
+import { isMeasurementDate, measurementEntrySchema, measurementPeriod } from '@workspace/api-zod';
 import { getState, isValidState, replaceState, update } from './store';
 import type {
   Adjustment,
@@ -139,10 +139,11 @@ export interface GoalInput {
   targetDate: string;
   strategy?: string;
   rationale?: string;
-  metric?: { name: string; unit: string; baseline: number; target: number; kind: MetricKind };
+  metric?: { name: string; unit: string; baseline: number; target: number; kind: MetricKind; frequency?: Metric['frequency'] };
 }
 
 export function addGoal(input: GoalInput, isDemo = false) {
+  if (input.metric) validateMetricDefinition(input.metric);
   const id = uid();
   update((d) => {
     d.goals.unshift(buildGoal(id, input, isDemo));
@@ -204,14 +205,28 @@ export function changeTargetDate(id: string, date: string, reason: string) {
   });
 }
 
-export function changeMetricTarget(goalId: string, metricId: string, target: number, reason: string) {
+export function changeMetricTarget(goalId: string, metricId: string, target: number, reason: string, frequency?: Metric['frequency']) {
   update((d) => {
     const g = findGoal(d, goalId);
     const m = g.metrics.find((x) => x.id === metricId);
     if (!m) return;
-    const from = String(m.target);
+    const nextFrequency = frequency ?? m.frequency ?? 'cumulative';
+    if (nextFrequency !== (m.frequency ?? 'cumulative') && m.entries.length) {
+      throw new Error('Keep this measurement’s history intact. Add a new measurement to use a different frequency.');
+    }
+    if (!Number.isFinite(target) || (nextFrequency !== 'cumulative' && target <= 0)) throw new Error('Enter a valid target; recurring targets must be greater than zero.');
+    const from = `${m.target} (${m.frequency ?? 'cumulative'})`;
+    if (nextFrequency !== (m.frequency ?? 'cumulative')) {
+      delete m.targetHistory;
+    } else if (nextFrequency !== 'cumulative' && target !== m.target) {
+      const start = measurementPeriod(m, todayIso())!.start;
+      const previous = m.targetHistory ?? [{ start: '0001-01-01', target: m.target }];
+      m.targetHistory = [...previous.filter((item) => item.start < start), { start, target }];
+    }
     m.target = target;
-    g.history.unshift(ev({ kind: 'target', summary: `Target for "${m.name}" changed`, reason, from, to: String(target) }));
+    m.frequency = nextFrequency;
+    if (nextFrequency !== 'cumulative') m.baseline = 0;
+    g.history.unshift(ev({ kind: 'target', summary: `Target for "${m.name}" changed`, reason, from, to: `${target} (${nextFrequency})` }));
   });
 }
 
@@ -293,7 +308,12 @@ export function deleteMilestone(goalId: string, msId: string) {
   });
 }
 
+function validateMetricDefinition(m: Pick<Metric, 'baseline' | 'target' | 'frequency'>) {
+  if (!Number.isFinite(m.target) || !Number.isFinite(m.baseline)) throw new Error('Enter a valid starting value and target.');
+  if (m.frequency && m.frequency !== 'cumulative' && (m.baseline !== 0 || m.target <= 0)) throw new Error('Recurring measurements start at zero and need a positive period target.');
+}
 export function addMetric(goalId: string, m: Omit<Metric, 'id' | 'entries'>) {
+  validateMetricDefinition(m);
   update((d) => {
     const g = findGoal(d, goalId);
     g.metrics.push({ ...m, id: uid(), entries: [] });

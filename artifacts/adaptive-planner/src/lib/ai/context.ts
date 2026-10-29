@@ -1,5 +1,5 @@
 import { addDaysIso, monthStartIso, nextMonday, todayIso, weekStartIso } from '@/lib/dates';
-import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt } from '@/lib/store/selectors';
+import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt, measurementPeriod, measurementTargetAt } from '@/lib/store/selectors';
 import type { AppState, Goal, Task } from '@/lib/store/types';
 import type { Operation, Screen } from './types';
 import { periodContext } from './context-periods';
@@ -44,7 +44,9 @@ function compactGoal(g: Goal, deep: boolean, tasks: Task[]) {
       unit: m.unit,
       kind: m.kind,
       baseline: m.baseline,
-      target: m.target,
+      target: measurementTargetAt(m),
+      frequency: m.frequency ?? 'cumulative',
+      period: measurementPeriod(m),
       current: metricValueAt(m),
       recent: deep ? [...m.entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map((e) => ({
         date: e.date, value: e.value, mode: e.mode ?? 'absolute-observation', source: e.source,

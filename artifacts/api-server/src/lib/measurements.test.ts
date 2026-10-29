@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contributionAmount, contributionPercent, measurementEntrySchema, measurementTimeline, measurementValueAt, type MeasurementEvent } from '@workspace/api-zod';
+import { contributionAmount, contributionPercent, measurementEntrySchema, measurementTimeline, measurementValueAt, measurementPeriod, measurementPeriods, measurementEntries, measurementTargetAt, type MeasurementEvent } from '@workspace/api-zod';
 
 const observation = (id: string, value: number, date = '2024-01-01'): MeasurementEvent => ({ id, date, value });
 const result = (id: string, value: number, date = '2024-01-02', taskId = 'task', milestoneId = 'milestone'): MeasurementEvent => ({
@@ -55,4 +55,73 @@ test('malformed contribution records fail the server workspace validation bounda
     { ...result('a', 1), source: { taskId: 'task' } },
   ]) assert.equal(measurementEntrySchema.safeParse(invalid).success, false);
   assert.equal(measurementEntrySchema.safeParse(observation('legacy', 0)).success, true);
+});
+
+test('calendar months and Monday weeks have stable leap-year and year-crossing boundaries', () => {
+  assert.deepEqual(measurementPeriod({ frequency: 'monthly' }, '2024-02-15'), { start: '2024-02-01', end: '2024-02-29' });
+  assert.deepEqual(measurementPeriod({ frequency: 'monthly' }, '2025-02-15'), { start: '2025-02-01', end: '2025-02-28' });
+  assert.deepEqual(measurementPeriod({ frequency: 'weekly' }, '2026-10-25'), { start: '2026-10-19', end: '2026-10-25' });
+  assert.deepEqual(measurementPeriod({ frequency: 'weekly' }, '2026-10-26'), { start: '2026-10-26', end: '2026-11-01' });
+  assert.deepEqual(measurementPeriod({ frequency: 'weekly' }, '2025-01-01'), { start: '2024-12-30', end: '2025-01-05' });
+  assert.equal(measurementPeriod({}, '2024-01-01'), null);
+});
+test('monthly hours start fresh without carrying excess or deficits into another month', () => {
+  const m = { baseline: 0, target: 30, frequency: 'monthly' as const, entries: [result('jan', 35, '2024-01-31'), result('feb', 5, '2024-02-01')] };
+  assert.equal(measurementValueAt(m, '2024-01-31'), 35);
+  assert.equal(measurementValueAt(m, '2024-02-29'), 5);
+  assert.equal(measurementValueAt(m, '2024-03-01'), 0);
+  assert.equal(contributionAmount(m, undefined, '2024-02-29'), 5);
+  assert.equal(contributionPercent(m, 6), 20);
+  assert.deepEqual(measurementEntries(m, '2024-02-29').map((e) => e.id), ['feb']);
+});
+test('weekly work uses its work date, including Sunday and Monday at a month boundary', () => {
+  const m = { baseline: 0, frequency: 'weekly' as const, entries: [
+    result('sun', 4, '2024-03-31'), result('mon', 2, '2024-04-01'), result('tue', 3, '2024-04-02'),
+  ] };
+  assert.equal(measurementValueAt(m, '2024-03-31'), 4);
+  assert.equal(measurementValueAt(m, '2024-04-01'), 2);
+  assert.equal(measurementValueAt(m, '2024-04-07'), 5);
+  assert.equal(measurementValueAt(m, '2024-04-08'), 0);
+});
+test('period-to-date observations reconcile only that period, with stable same-day deltas', () => {
+  const m = { baseline: 0, frequency: 'monthly' as const, entries: [
+    observation('jan-total', 30, '2024-01-31'),
+    result('feb-before', 4, '2024-02-02'), observation('feb-reading', 10, '2024-02-03'),
+    result('feb-after', 2, '2024-02-03'), result('late-jan', 3, '2024-01-15'),
+  ] };
+  assert.equal(measurementValueAt(m, '2024-02-29'), 12);
+  assert.equal(measurementValueAt(m, '2024-01-31'), 30);
+  assert.equal(contributionAmount(m, undefined, '2024-02-29'), 6);
+  assert.deepEqual(measurementTimeline(m, '2024-02-29').map((p) => p.value), [4, 10, 12]);
+});
+test('historical corrections do not leak into the next period and remain source-attributed once', () => {
+  const m = { baseline: 0, frequency: 'monthly' as const, entries: [result('jan', 6, '2024-01-31'), result('feb', 2, '2024-02-01')] };
+  m.entries[0].value = 8;
+  assert.equal(measurementValueAt(m, '2024-01-31'), 8);
+  assert.equal(measurementValueAt(m, '2024-02-29'), 2);
+  assert.equal(contributionAmount(m, { milestoneId: 'milestone' }, '2024-01-31'), 8);
+  assert.equal(contributionAmount(m, { taskId: 'task' }, '2024-01-31'), 8);
+  assert.equal(contributionAmount(m, undefined, '2024-01-31'), 8);
+  m.entries.shift();
+  assert.equal(measurementValueAt(m, '2024-01-31'), 0);
+  assert.equal(measurementValueAt(m, '2024-02-29'), 2);
+});
+test('history preserves recorded periods and includes a new current period with zero results', () => {
+  const m = { baseline: 0, frequency: 'monthly' as const, entries: [result('jan', 5, '2024-01-12'), result('jan2', 3, '2024-01-15'), result('mar', 4, '2024-03-02')] };
+  assert.deepEqual(measurementPeriods(m, '2024-04-01').map((p) => p.start), ['2024-04-01', '2024-03-01', '2024-01-01']);
+  assert.equal(measurementValueAt(m, '2024-02-29'), 0);
+});
+test('explicit cumulative frequency preserves legacy values across all periods', () => {
+  const entries = [result('jan', 3, '2024-01-31'), result('feb', 2, '2024-02-01')];
+  assert.equal(measurementValueAt({ baseline: 10, frequency: 'cumulative', entries }, '2024-02-29'), 15);
+  assert.equal(contributionAmount({ frequency: 'cumulative', entries }, undefined, '2024-02-29'), 5);
+});
+test('new recurring targets never rewrite past period percentages', () => {
+  const m = { baseline: 0, target: 40, frequency: 'monthly' as const, entries: [],
+    targetHistory: [{ start: '0001-01-01', target: 30 }, { start: '2024-02-01', target: 40 }],
+  };
+  assert.equal(measurementTargetAt(m, '2024-01-31'), 30);
+  assert.equal(measurementTargetAt(m, '2024-02-01'), 40);
+  assert.equal(contributionPercent(m, 15, '2024-01-31'), 50);
+  assert.equal(contributionPercent(m, 20, '2024-02-29'), 50);
 });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApplyAiOperationsBody, measurementEntrySchema } from '@workspace/api-zod';
+import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
 export type Operation = z.infer<typeof operationSchema>;
@@ -16,8 +16,14 @@ const milestone = z.object({
 const metric = z.object({
   id, name: text, unit: text, kind: z.enum(['outcome', 'leading']),
   baseline: z.number(), target: z.number(),
+  frequency: measurementFrequencySchema.optional(),
+  targetHistory: z.array(z.object({ start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), target: z.number().positive().finite() })).optional(),
   entries: z.array(measurementEntrySchema),
-}).passthrough();
+}).passthrough().superRefine((m, ctx) => {
+  if (m.frequency && m.frequency !== 'cumulative' && (m.baseline !== 0 || m.target <= 0)) {
+    ctx.addIssue({ code: 'custom', message: 'Recurring measurements start at zero and need a positive period target.' });
+  }
+});
 const goal = z.object({
   id, title: text, outcome: text, area: z.enum(['business', 'fitness', 'english', 'personal']),
   priority, targetDate: text, status: z.enum(['active', 'paused', 'completed', 'cancelled']),
@@ -52,6 +58,7 @@ export const stateSchema = z.object({
       metrics: z.array(z.object({
         goalId: id, goalTitle: text, metricId: id, name: text, unit: text,
         kind: z.enum(['outcome', 'leading']), value: z.number(), target: z.number(),
+        frequency: measurementFrequencySchema.optional(), periodStart: text.optional(), periodEnd: text.optional(),
       })),
     }),
     adjustments: z.array(z.object({ kind: z.enum(['strategy', 'milestone', 'pause']), goalId: id, summary: text })),

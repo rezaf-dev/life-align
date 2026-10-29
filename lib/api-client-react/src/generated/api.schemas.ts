@@ -142,6 +142,15 @@ export const AiOperationKind = {
   leading: 'leading',
 } as const;
 
+export type AiOperationFrequency = typeof AiOperationFrequency[keyof typeof AiOperationFrequency];
+
+
+export const AiOperationFrequency = {
+  cumulative: 'cumulative',
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
 export type AiOperationReviewType = typeof AiOperationReviewType[keyof typeof AiOperationReviewType];
 
 
@@ -203,6 +212,7 @@ export interface AiOperation {
   kind?: AiOperationKind;
   baseline?: number;
   target?: number;
+  frequency?: AiOperationFrequency;
   value?: number;
   date?: string;
   reviewType?: AiOperationReviewType;
