@@ -26,12 +26,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-- Planning data deliberately remains browser-local; AI conversations are stored separately in the browser. The API server is stateless and does not replace or migrate existing planning data.
+- Planning data is saved to each approved Clerk account's private PostgreSQL workspace. Every private API checks current approval; membership administration does not expose other users' planning records.
+- The configured, verified `ALIGN_OWNER_EMAIL` is the only automatic administrator grant. Owner seeding is idempotent in each Clerk environment; never grant ownership to the first signup. New accounts wait for approval, and rejected/revoked accounts cannot access planning or AI.
+- Existing anonymous browser workspace/conversation keys must remain untouched. Only the owner can explicitly import that previous workspace once; never automatically attach it to a new member. New member workspaces start empty.
+- AI conversation caches are namespaced by Clerk user ID and cleared from active memory on identity changes. They currently remain browser-specific, while planning records sync between devices with revision checks.
 - Execution and outcomes must remain separate: completing an outreach task must never increase customer or revenue measurements.
 - Plan adaptations must preserve original commitments and important changes with reasons; editing should not erase the user's decision history.
 - Built-in insights are deterministic observations. Ask Align uses real OpenRouter calls to propose edits, never to silently modify records.
 - AI uses `https://openrouter.ai/api/v1`, server-only `OPENROUTER_API_KEY`, and defaults to `openai/gpt-6-luna`. Optional server environment variable `OPENROUTER_MODEL` changes the model explicitly; never silently fall back to another model.
-- AI approval is an atomic server-validated transaction returning a workspace snapshot. The client refuses to replace state changed while the request was in flight. Reasons and before/after history are retained for consequential edits; original saved commitments are immutable even when empty.
+- AI approval is an atomic server-validated transaction returning a workspace snapshot. The client refuses to replace state changed while the request was in flight and waits for the account save before reporting success. Concurrent saves never silently overwrite another device's version; offer backup/reload on conflict. Reasons and before/after history are retained for consequential edits; original saved commitments are immutable even when empty.
 
 ## Product
 

@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { seedConfiguredOwner } from './lib/owner-bootstrap';
 
 const rawPort = process.env["PORT"];
 
@@ -13,6 +14,13 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+try {
+  await seedConfiguredOwner();
+} catch (error) {
+  logger.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Could not initialize owner access. Check Clerk, ALIGN_OWNER_EMAIL, and database configuration.');
+  process.exit(1);
 }
 
 app.listen(port, (err) => {

@@ -24,7 +24,12 @@ import type {
   AiApprovalResult,
   AiConversationInput,
   AiStatus,
-  HealthStatus
+  HealthStatus,
+  Member,
+  MemberAccessUpdate,
+  WorkspaceEnvelope,
+  WorkspaceInput,
+  WorkspaceSaveResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -53,6 +58,466 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetCurrentMemberUrl = () => {
+
+
+
+
+  return `/api/auth/me`
+}
+
+export const getCurrentMember = async ( options?: Parameters<typeof customFetch>[1]): Promise<Member> => {
+
+  return customFetch<Member>(getGetCurrentMemberUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCurrentMemberQueryKey = () => {
+    return [
+    `/api/auth/me`
+    ] as const;
+    }
+
+
+export const getGetCurrentMemberQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentMember>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentMember>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCurrentMemberQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentMember>>> = ({ signal }) => getCurrentMember({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentMember>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCurrentMemberQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentMember>>>
+export type GetCurrentMemberQueryError = ErrorType<void>
+
+
+
+export function useGetCurrentMember<TData = Awaited<ReturnType<typeof getCurrentMember>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentMember>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCurrentMemberQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMembersUrl = () => {
+
+
+
+
+  return `/api/admin/users`
+}
+
+export const listMembers = async ( options?: Parameters<typeof customFetch>[1]): Promise<Member[]> => {
+
+  return customFetch<Member[]>(getListMembersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMembersQueryKey = () => {
+    return [
+    `/api/admin/users`
+    ] as const;
+    }
+
+
+export const getListMembersQueryOptions = <TData = Awaited<ReturnType<typeof listMembers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMembersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMembers>>> = ({ signal }) => listMembers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listMembers>>>
+export type ListMembersQueryError = ErrorType<unknown>
+
+
+
+export function useListMembers<TData = Awaited<ReturnType<typeof listMembers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateMemberAccessUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/users/${id}`
+}
+
+export const updateMemberAccess = async (id: string,
+    memberAccessUpdate: MemberAccessUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Member> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<Member>(getUpdateMemberAccessUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memberAccessUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateMemberAccessMutationKey = () => ['updateMemberAccess'] as const;
+
+export const getUpdateMemberAccessMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemberAccess>>, TError,UpdateMemberAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMemberAccess>>, TError,UpdateMemberAccessMutationVariables, TContext> => {
+
+const mutationKey = getUpdateMemberAccessMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMemberAccess>>, UpdateMemberAccessMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateMemberAccess(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMemberAccessMutationResult = NonNullable<Awaited<ReturnType<typeof updateMemberAccess>>>
+    export type UpdateMemberAccessMutationBody = BodyType<MemberAccessUpdate>
+    export type UpdateMemberAccessMutationError = ErrorType<unknown>
+    export type UpdateMemberAccessMutationVariables = {id: string;data: BodyType<MemberAccessUpdate>}
+
+    export const useUpdateMemberAccess = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemberAccess>>, TError,UpdateMemberAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMemberAccess>>,
+        TError,
+        UpdateMemberAccessMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateMemberAccessMutationOptions(options));
+    }
+
+export const getGetWorkspaceUrl = () => {
+
+
+
+
+  return `/api/workspace`
+}
+
+export const getWorkspace = async ( options?: Parameters<typeof customFetch>[1]): Promise<WorkspaceEnvelope> => {
+
+  return customFetch<WorkspaceEnvelope>(getGetWorkspaceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceQueryKey = () => {
+    return [
+    `/api/workspace`
+    ] as const;
+    }
+
+
+export const getGetWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspace>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspace>>> = ({ signal }) => getWorkspace({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspace>>>
+export type GetWorkspaceQueryError = ErrorType<unknown>
+
+
+
+export function useGetWorkspace<TData = Awaited<ReturnType<typeof getWorkspace>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveWorkspaceUrl = () => {
+
+
+
+
+  return `/api/workspace`
+}
+
+export const saveWorkspace = async (workspaceInput: WorkspaceInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkspaceSaveResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkspaceSaveResult>(getSaveWorkspaceUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(workspaceInput)
+  }
+);}
+
+
+
+
+
+export const getSaveWorkspaceMutationKey = () => ['saveWorkspace'] as const;
+
+export const getSaveWorkspaceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveWorkspace>>, TError,SaveWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveWorkspace>>, TError,SaveWorkspaceMutationVariables, TContext> => {
+
+const mutationKey = getSaveWorkspaceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveWorkspace>>, SaveWorkspaceMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveWorkspace(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveWorkspaceMutationResult = NonNullable<Awaited<ReturnType<typeof saveWorkspace>>>
+    export type SaveWorkspaceMutationBody = BodyType<WorkspaceInput>
+    export type SaveWorkspaceMutationError = ErrorType<void>
+    export type SaveWorkspaceMutationVariables = {data: BodyType<WorkspaceInput>}
+
+    export const useSaveWorkspace = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveWorkspace>>, TError,SaveWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveWorkspace>>,
+        TError,
+        SaveWorkspaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveWorkspaceMutationOptions(options));
+    }
+
+export const getImportOwnerWorkspaceUrl = () => {
+
+
+
+
+  return `/api/workspace/import`
+}
+
+export const importOwnerWorkspace = async (workspaceInput: WorkspaceInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkspaceSaveResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkspaceSaveResult>(getImportOwnerWorkspaceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(workspaceInput)
+  }
+);}
+
+
+
+
+
+export const getImportOwnerWorkspaceMutationKey = () => ['importOwnerWorkspace'] as const;
+
+export const getImportOwnerWorkspaceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importOwnerWorkspace>>, TError,ImportOwnerWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importOwnerWorkspace>>, TError,ImportOwnerWorkspaceMutationVariables, TContext> => {
+
+const mutationKey = getImportOwnerWorkspaceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importOwnerWorkspace>>, ImportOwnerWorkspaceMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  importOwnerWorkspace(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportOwnerWorkspaceMutationResult = NonNullable<Awaited<ReturnType<typeof importOwnerWorkspace>>>
+    export type ImportOwnerWorkspaceMutationBody = BodyType<WorkspaceInput>
+    export type ImportOwnerWorkspaceMutationError = ErrorType<unknown>
+    export type ImportOwnerWorkspaceMutationVariables = {data: BodyType<WorkspaceInput>}
+
+    export const useImportOwnerWorkspace = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importOwnerWorkspace>>, TError,ImportOwnerWorkspaceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importOwnerWorkspace>>,
+        TError,
+        ImportOwnerWorkspaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getImportOwnerWorkspaceMutationOptions(options));
+    }
 
 export const getGetAiStatusUrl = () => {
 

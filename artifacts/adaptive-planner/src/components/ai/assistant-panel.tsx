@@ -30,6 +30,7 @@ import { getAiStore, setAiStore, updateConversation, useAiStore } from '@/lib/ai
 import { isOptional, type ChatMessage, type Conversation, type Operation, type Proposal, type Screen } from '@/lib/ai/types';
 import { fmt, nextMonday, relDay, uid } from '@/lib/dates';
 import { getState, replaceState, useAppState } from '@/lib/store/store';
+import { flushWorkspace } from '@/lib/workspace-sync';
 import { cn } from '@/lib/utils';
 
 export const PANEL_WIDTH = 440;
@@ -311,14 +312,15 @@ export function AssistantPanel() {
     const requestId = p.requestId ?? uid();
     // Persist the id first so a retry after a lost response is idempotent on the server.
     setProposal(convId, msgId, (x) => { x.requestId = requestId; x.staleNotice = false; });
-    const snapshot = getState();
-    if (snapshot.aiApplied?.includes(requestId)) {
-      setProposal(convId, msgId, (x) => { x.status = 'applied'; x.appliedAt = new Date().toISOString(); });
-      return;
-    }
     setApplyingId(p.id);
     setApplyError((e) => ({ ...e, [p.id]: '' }));
     try {
+      await flushWorkspace();
+      const snapshot = getState();
+      if (snapshot.aiApplied?.includes(requestId)) {
+        setProposal(convId, msgId, (x) => { x.status = 'applied'; x.appliedAt = new Date().toISOString(); });
+        return;
+      }
       const res = await applyOperations(requestId, ops, snapshot);
       if (getState() !== snapshot) {
         setProposal(convId, msgId, (x) => { x.staleNotice = true; });
@@ -326,6 +328,7 @@ export function AssistantPanel() {
         return;
       }
       replaceState(res.state);
+      await flushWorkspace();
       setProposal(convId, msgId, (x) => {
         x.status = 'applied';
         x.changes = res.changes;

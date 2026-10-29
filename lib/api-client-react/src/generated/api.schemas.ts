@@ -5,6 +5,70 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type MemberRole = typeof MemberRole[keyof typeof MemberRole];
+
+
+export const MemberRole = {
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export type MemberStatus = typeof MemberStatus[keyof typeof MemberStatus];
+
+
+export const MemberStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+  revoked: 'revoked',
+} as const;
+
+export interface Member {
+  id: string;
+  email: string;
+  name: string;
+  role: MemberRole;
+  status: MemberStatus;
+  createdAt: string;
+  legacyImportAvailable: boolean;
+}
+
+export type MemberAccessUpdateStatus = typeof MemberAccessUpdateStatus[keyof typeof MemberAccessUpdateStatus];
+
+
+export const MemberAccessUpdateStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+  revoked: 'revoked',
+} as const;
+
+export interface MemberAccessUpdate {
+  status: MemberAccessUpdateStatus;
+}
+
+export type WorkspaceEnvelopeState = { [key: string]: unknown };
+
+export interface WorkspaceEnvelope {
+  userId: string;
+  state: WorkspaceEnvelopeState;
+  /** @minimum 0 */
+  revision: number;
+  updatedAt: string;
+}
+
+export type WorkspaceInputState = { [key: string]: unknown };
+
+export interface WorkspaceInput {
+  state: WorkspaceInputState;
+  /** @minimum 0 */
+  revision: number;
+}
+
+export interface WorkspaceSaveResult {
+  revision: number;
+  updatedAt: string;
+}
+
 export interface AiStatus {
   configured: boolean;
   model: string;

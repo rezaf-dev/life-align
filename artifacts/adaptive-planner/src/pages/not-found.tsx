@@ -9,7 +9,7 @@ export default function NotFound() {
         mark="circle"
         title="This page is off the map"
         body="The link may be old, or the item was deleted."
-        action={<Button asChild><Link href="/">Back to Overview</Link></Button>}
+        action={<Button asChild><Link href="/overview">Back to Overview</Link></Button>}
       />
     </div>
   );

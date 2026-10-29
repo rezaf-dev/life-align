@@ -11,6 +11,89 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /auth/me:
+    get:
+      operationId: getCurrentMember
+      tags: [auth]
+      responses:
+        "200":
+          description: Authenticated account and server-controlled access
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "401": { description: Sign in required }
+  /admin/users:
+    get:
+      operationId: listMembers
+      tags: [admin]
+      responses:
+        "200":
+          description: Accounts (administrator only; no planning records)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Member" }
+  /admin/users/{id}:
+    patch:
+      operationId: updateMemberAccess
+      tags: [admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberAccessUpdate" }
+      responses:
+        "200":
+          description: Updated access
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+  /workspace:
+    get:
+      operationId: getWorkspace
+      tags: [workspace]
+      responses:
+        "200":
+          description: Only the authenticated approved account's workspace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceEnvelope" }
+    put:
+      operationId: saveWorkspace
+      tags: [workspace]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkspaceInput" }
+      responses:
+        "200":
+          description: Saved with optimistic concurrency control
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceSaveResult" }
+        "409": { description: Newer saved workspace exists; local changes must not be overwritten }
+  /workspace/import:
+    post:
+      operationId: importOwnerWorkspace
+      tags: [workspace]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkspaceInput" }
+      responses:
+        "200":
+          description: One-time explicit owner import; old browser data remains untouched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceSaveResult" }
   /ai/status:
     get:
       operationId: getAiStatus
@@ -73,6 +156,44 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    Member:
+      type: object
+      required: [id, email, name, role, status, createdAt, legacyImportAvailable]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [admin, member] }
+        status: { type: string, enum: [pending, approved, rejected, revoked] }
+        createdAt: { type: string }
+        legacyImportAvailable: { type: boolean }
+    MemberAccessUpdate:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [approved, rejected, revoked] }
+    WorkspaceEnvelope:
+      type: object
+      required: [userId, state, revision, updatedAt]
+      properties:
+        userId: { type: string }
+        state: { type: object, additionalProperties: true }
+        revision: { type: integer, minimum: 0 }
+        updatedAt: { type: string }
+    WorkspaceInput:
+      type: object
+      required: [state, revision]
+      additionalProperties: false
+      properties:
+        state: { type: object, additionalProperties: true }
+        revision: { type: integer, minimum: 0 }
+    WorkspaceSaveResult:
+      type: object
+      required: [revision, updatedAt]
+      properties:
+        revision: { type: integer }
+        updatedAt: { type: string }
     AiStatus:
       type: object
       required: [configured, model]

@@ -14,6 +14,59 @@ import { exportJson, importJson, removeSampleData, restoreSample, setSettings, s
 import { useAppState } from '@/lib/store/store';
 import type { Area } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { useAccess } from '@/components/auth/access-provider';
+import { hasLegacyWorkspace, importLegacyWorkspace } from '@/lib/workspace-sync';
+
+const LEGACY_KEYS = ['align.workspace.v1'];
+function legacyPreview(): { goals: number; tasks: number; reviews: number } | null {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !LEGACY_KEYS.some((x) => k.startsWith(x))) continue;
+      const v = JSON.parse(localStorage.getItem(k) ?? 'null');
+      const st = v?.state ?? v;
+      if (st && Array.isArray(st.goals)) return { goals: st.goals.length, tasks: (st.tasks ?? []).length, reviews: (st.reviews ?? []).length };
+    }
+  } catch { /* preview is best-effort */ }
+  return null;
+}
+
+function LegacyImportCard({ onBackup }: { onBackup: () => void }) {
+  const { member } = useAccess();
+  const { toast } = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  if (member?.role !== 'admin' || !member.legacyImportAvailable || !hasLegacyWorkspace() || done) return null;
+  const preview = legacyPreview();
+  return (
+    <section className="surface rise border-primary/30 p-5 md:p-6" data-testid="card-legacy-import">
+      <div className="eyebrow mb-1 text-primary">Owner only</div>
+      <h2 className="font-display text-xl">Import this browser’s previous workspace</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Before accounts existed, Align saved a workspace in this browser{preview ? <> containing <span className="font-num" data-testid="text-legacy-counts">{preview.goals} goals, {preview.tasks} tasks and {preview.reviews} reviews</span></> : ''}. Importing replaces your account’s current workspace. The browser copy is left untouched.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={onBackup} data-testid="button-legacy-backup"><Download /> Back up current first</Button>
+        <Button disabled={busy} onClick={() => setConfirm(true)} data-testid="button-legacy-import"><Upload /> {busy ? 'Importing…' : 'Import into my account'}</Button>
+      </div>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title="Replace your account workspace?"
+        description="Your account’s current goals, tasks and reviews will be replaced by the previous browser workspace. Download a backup first if you might want them back."
+        confirmLabel="Import and replace"
+        destructive
+        onConfirm={async () => {
+          setBusy(true);
+          try { await importLegacyWorkspace(); setDone(true); toast({ title: 'Previous workspace imported' }); }
+          catch (e) { toast({ title: 'Import failed', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
+          finally { setBusy(false); }
+        }}
+      />
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const state = useAppState();
@@ -49,7 +102,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Settings" description="Everything lives in this browser. Export a backup whenever it matters." />
+      <PageHeader title="Settings" description="Your workspace is private to your account and saves automatically. Export a backup whenever it matters." />
       <div className="space-y-6">
         <Section title="You">
           <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); setSettings({ name: name.trim() }); toast({ title: 'Name saved' }); }}>
@@ -91,6 +144,8 @@ export default function SettingsPage() {
           </label>
         </Section>
 
+        <LegacyImportCard onBackup={download} />
+
         <Section title="Backup">
           <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
             <div className="bg-card p-4">
@@ -120,7 +175,7 @@ export default function SettingsPage() {
               data-testid="input-import-file"
             />
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Data is saved in this browser only. Export a backup file before clearing site data or switching devices.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Your workspace is saved to your private account. A backup file is a portable copy you keep yourself.</p>
         </Section>
 
         <details className="surface rise group p-5 md:p-6" data-testid="details-reset">
@@ -215,7 +270,7 @@ function Onboarding({ open, onOpenChange, hasDemo, defaultName }: { open: boolea
     startFresh(name, inputs, removeSample);
     onOpenChange(false);
     toast({ title: 'Your workspace is ready', description: `${inputs.length} goal${inputs.length === 1 ? '' : 's'} added${removeSample ? ', sample data removed' : ''}.` });
-    navigate('/');
+    navigate('/overview');
   };
 
   const titles = ['Welcome to a fresh start', 'Up to three goals', 'Sample data'];

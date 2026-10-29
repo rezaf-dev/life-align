@@ -8,6 +8,90 @@
 import * as zod from 'zod';
 
 
+export const GetCurrentMemberResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['admin', 'member']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'revoked']),
+  "createdAt": zod.string(),
+  "legacyImportAvailable": zod.boolean()
+})
+
+
+export const ListMembersResponseItem = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['admin', 'member']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'revoked']),
+  "createdAt": zod.string(),
+  "legacyImportAvailable": zod.boolean()
+})
+export const ListMembersResponse = zod.array(ListMembersResponseItem)
+
+
+export const UpdateMemberAccessParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateMemberAccessBody = zod.object({
+  "status": zod.enum(['approved', 'rejected', 'revoked'])
+})
+
+export const UpdateMemberAccessResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['admin', 'member']),
+  "status": zod.enum(['pending', 'approved', 'rejected', 'revoked']),
+  "createdAt": zod.string(),
+  "legacyImportAvailable": zod.boolean()
+})
+
+
+export const getWorkspaceResponseRevisionMin = 0;
+
+
+
+export const GetWorkspaceResponse = zod.object({
+  "userId": zod.string(),
+  "state": zod.record(zod.string(), zod.unknown()),
+  "revision": zod.number().int().min(getWorkspaceResponseRevisionMin),
+  "updatedAt": zod.string()
+})
+
+
+export const saveWorkspaceBodyRevisionMin = 0;
+
+
+
+export const SaveWorkspaceBody = zod.object({
+  "state": zod.record(zod.string(), zod.unknown()),
+  "revision": zod.number().int().min(saveWorkspaceBodyRevisionMin)
+})
+
+export const SaveWorkspaceResponse = zod.object({
+  "revision": zod.number().int(),
+  "updatedAt": zod.string()
+})
+
+
+export const importOwnerWorkspaceBodyRevisionMin = 0;
+
+
+
+export const ImportOwnerWorkspaceBody = zod.object({
+  "state": zod.record(zod.string(), zod.unknown()),
+  "revision": zod.number().int().min(importOwnerWorkspaceBodyRevisionMin)
+})
+
+export const ImportOwnerWorkspaceResponse = zod.object({
+  "revision": zod.number().int(),
+  "updatedAt": zod.string()
+})
+
+
 export const GetAiStatusResponse = zod.object({
   "configured": zod.boolean(),
   "model": zod.string()

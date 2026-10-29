@@ -26,10 +26,14 @@ import { cn } from '@/lib/utils';
 import { AssistantPanel } from '@/components/ai/assistant-panel';
 import { openAssistant, toggleAssistant, useAssistantBus } from '@/lib/ai/bus';
 import { setAiStore, useAiStore } from '@/lib/ai/conversations';
-import { MessagesSquare, X } from 'lucide-react';
+import { MessagesSquare, ShieldCheck, X } from 'lucide-react';
+import { useAccess } from '@/components/auth/access-provider';
+import { SignOutButton } from '@/components/auth/auth-chrome';
+import { SyncStatus } from '@/components/auth/sync-status';
+import { useAdminUsers } from '@/pages/admin';
 
 const NAV = [
-  { href: '/', label: 'Overview', icon: Compass, test: 'overview' },
+  { href: '/overview', label: 'Overview', icon: Compass, test: 'overview' },
   { href: '/goals', label: 'Goals', icon: Target, test: 'goals' },
   { href: '/planner', label: 'Planner', icon: CalendarRange, test: 'planner' },
   { href: '/tasks', label: 'Tasks & Inbox', icon: Inbox, test: 'tasks' },
@@ -58,10 +62,14 @@ function useCounts() {
 function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const [loc] = useLocation();
   const counts = useCounts();
-  const isActive = (href: string) => (href === '/' ? loc === '/' : loc.startsWith(href));
+  const { member } = useAccess();
+  const isAdmin = member?.role === 'admin' && member.status === 'approved';
+  const { data: users } = useAdminUsers(isAdmin);
+  const pending = isAdmin ? (users ?? []).filter((u) => u.status === 'pending').length : 0;
+  const isActive = (href: string) => (loc.startsWith(href));
   const item = (n: (typeof NAV)[number] | { href: string; label: string; icon: typeof Compass; test: string }) => {
     const active = isActive(n.href);
-    const badge = n.href === '/tasks' ? counts.inbox : 0;
+    const badge = n.href === '/tasks' ? counts.inbox : n.href === '/admin' ? pending : 0;
     const link = (
       <Link
         href={n.href}
@@ -98,7 +106,10 @@ function NavList({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
     <nav aria-label="Primary" className="flex flex-1 flex-col">
       <ul className="space-y-0.5">{NAV.map(item)}</ul>
       <div className="mt-auto pt-4">
-        <ul>{item({ href: '/settings', label: 'Settings', icon: Settings2, test: 'settings' })}</ul>
+        <ul>
+          {isAdmin && item({ href: '/admin', label: 'Members', icon: ShieldCheck, test: 'admin' })}
+          {item({ href: '/settings', label: 'Settings', icon: Settings2, test: 'settings' })}
+        </ul>
       </div>
     </nav>
   );
@@ -124,14 +135,15 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { settings, goals } = useAppState();
+  const { member } = useAccess();
   const [mobileOpen, setMobileOpen] = useState(false);
   const collapsed = settings.sidebarCollapsed;
   const hasDemo = goals.some((g) => g.isDemo);
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const assistant = useAssistantBus();
   const aiStore = useAiStore();
-  const showIntro = !aiStore.introDismissed && aiStore.conversations.length === 0 && !assistant.open;
+  const showIntro = !location.startsWith('/admin') && !aiStore.introDismissed && aiStore.conversations.length === 0 && !assistant.open;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -155,7 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [settings.theme]);
 
   const brand = (c: boolean) => (
-    <Link href="/" onClick={(e) => { if (interceptNav('/')) e.preventDefault(); }} className="flex items-center gap-2.5 px-1" data-testid="link-brand">
+    <Link href="/overview" onClick={(e) => { if (interceptNav('/overview')) e.preventDefault(); }} className="flex items-center gap-2.5 px-1" data-testid="link-brand">
       <BrandMark className="size-7 shrink-0" />
       {!c && <span className="font-display text-[1.35rem] italic leading-none tracking-tight">Align</span>}
     </Link>
@@ -198,30 +210,39 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Button>
         <NavList collapsed={collapsed} />
         <div className={cn('mt-2 space-y-2 border-t border-sidebar-border pt-3', collapsed && 'flex flex-col items-center')}>
+          <SyncStatus collapsed={collapsed} />
           <ThemeToggle collapsed={collapsed} />
-          {!collapsed && (
-            <div className="px-2.5 text-xs text-muted-foreground">
-              <div className="truncate font-medium text-sidebar-foreground">{settings.name || 'You'}</div>
-              <div>{hasDemo ? 'Includes sample data' : 'Your data, stored in this browser'}</div>
-            </div>
-          )}
+          <div className={cn('flex items-center gap-1', collapsed ? 'flex-col' : 'pl-2.5')}>
+            {!collapsed && (
+              <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+                <div className="truncate font-medium text-sidebar-foreground" data-testid="text-account-name">{settings.name || member?.name || 'You'}</div>
+                <div className="truncate" data-testid="text-account-email">{member?.email ?? (hasDemo ? 'Includes sample data' : 'Private workspace')}</div>
+              </div>
+            )}
+            <SignOutButton workspace compact className="size-8 shrink-0 text-muted-foreground" />
+          </div>
         </div>
       </aside>
 
       <div className={cn('flex min-w-0 flex-1 flex-col transition-[padding] duration-300', assistant.open && '2xl:pr-[440px]')}>
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/85 px-4 py-3 backdrop-blur md:hidden">
           {brand(false)}
-          <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setMobileOpen(true)} data-testid="button-mobile-nav">
-            <Menu />
-          </Button>
+          <div className="flex items-center gap-2">
+            <SyncStatus collapsed />
+            <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setMobileOpen(true)} data-testid="button-mobile-nav">
+              <Menu />
+            </Button>
+          </div>
         </header>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent side="left" className="flex w-72 flex-col bg-sidebar p-4">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <div className="mb-6 mt-1">{brand(false)}</div>
             <NavList collapsed={false} onNavigate={() => setMobileOpen(false)} />
-            <div className="mt-3 border-t border-sidebar-border pt-3">
+            <div className="mt-3 space-y-1 border-t border-sidebar-border pt-3">
+              <SyncStatus />
               <ThemeToggle collapsed={false} />
+              <SignOutButton workspace className="w-full justify-start gap-3 px-2.5 text-sidebar-foreground/70" />
             </div>
           </SheetContent>
         </Sheet>

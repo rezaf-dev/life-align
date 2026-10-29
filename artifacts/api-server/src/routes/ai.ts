@@ -2,8 +2,10 @@ import { Router, type IRouter } from 'express';
 import { ApplyAiOperationsBody, ChatWithPlannerBody } from '@workspace/api-zod';
 import { applyOperations } from '../lib/planner-operations';
 import { configured, model, streamAssistant } from '../lib/planner-assistant';
+import { requireApproved } from '../middlewares/access';
 
 const router: IRouter = Router();
+router.use('/ai', requireApproved);
 const requests = new Map<string, { count: number; reset: number }>();
 let active = 0;
 
@@ -18,7 +20,7 @@ router.use('/ai', (req, res, next) => {
     try { sameOrigin = new URL(origin).host === host; } catch { /* null/invalid origins are not allowed */ }
     if (!sameOrigin) { res.status(403).json({ error: 'Use the assistant from this application.' }); return; }
   }
-  const key = req.ip ?? req.socket.remoteAddress ?? 'local';
+  const key = req.member!.id;
   const now = Date.now();
   for (const [k, v] of requests) if (v.reset < now) requests.delete(k);
   const current = requests.get(key) ?? { count: 0, reset: now + 60000 };

@@ -17,6 +17,7 @@ export async function getAiStatus(): Promise<{ configured: boolean; model: strin
 }
 
 async function readError(r: Response) {
+  if (r.status === 401 || r.status === 403) window.dispatchEvent(new Event('align:access-changed'));
   try {
     const j = await r.json();
     return j?.message || j?.error || `Request failed (${r.status})`;
