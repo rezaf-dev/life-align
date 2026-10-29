@@ -1,6 +1,6 @@
-# [Project name]
+# Align — Adaptive Personal Planning
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A personal planning workspace connecting goals, realistic commitments, real-world results, and reviews.
 
 ## Run & Operate
 
@@ -26,15 +26,18 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- This MVP deliberately uses browser-local persistence rather than accounts and a backend. The brief prioritizes coherent everyday workflows and visual quality over infrastructure.
+- Execution and outcomes must remain separate: completing an outreach task must never increase customer or revenue measurements.
+- Plan adaptations must preserve original commitments and important changes with reasons; editing should not erase the user's decision history.
+- Insights are deterministic, explicitly labeled observations, not claims of live AI analysis.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Five primary destinations: Overview, Goals, Planner, Tasks & Inbox, and Reviews. Goals, strategies, milestones, independent tasks, manually logged metrics, and reviews share a single planning model.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+Keep setup optional and task capture title-only. Use progressive disclosure. Default to polished light mode and support dark mode and smaller screens. Avoid unnecessary infrastructure, gamification, excessive notifications, and decorative analytics. The UX target is a simple, fast, sophisticated, enjoyable everyday personal tool—not an enterprise project management system.
 
 ## Gotchas
 
