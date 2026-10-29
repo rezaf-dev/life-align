@@ -24,6 +24,7 @@ import { finalizeWeek, rescheduleTasks, reopenWeek, setPeriodNote, setWeekPlan }
 import { dueReminders, effortLabel, inboxTasks, overdueTasks, plannedOn, tasksInRange, weekRange } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import { cn } from '@/lib/utils';
+import { AskButton } from '@/components/ai/ask-button';
 
 type View = 'year' | 'quarter' | 'month' | 'week' | 'today';
 const VIEWS: { value: View; label: string }[] = [
@@ -85,6 +86,11 @@ export default function PlannerPage() {
       <div className="rise mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="font-display text-[1.9rem] leading-tight md:text-[2.2rem]">Planner</h1>
         <div className="flex flex-wrap items-center gap-2">
+          <AskButton focus={{ screen: 'planner', period: {
+            start: view === 'week' ? weekStartIso(anchor) : view === 'month' ? monthStartIso(anchor) : view === 'quarter' ? quarterStart(anchor) : view === 'year' ? `${anchor.slice(0, 4)}-01-01` : anchor,
+            end: view === 'week' ? addDaysIso(weekStartIso(anchor), 6) : view === 'month' ? monthEndIso(anchor) : view === 'quarter' ? addDaysIso(addMonthsIso(quarterStart(anchor), 3), -1) : view === 'year' ? `${anchor.slice(0, 4)}-12-31` : anchor,
+            label,
+          } }} label="Plan with Align" />
           <div
             role="tablist"
             aria-label="Planning horizon"
@@ -397,13 +403,13 @@ function DayBlock({ day, today, onDrill }: { day: string; today: string; onDrill
         )}
       </div>
       {adding && <QuickAdd className="my-1.5" defaults={{ plannedDate: day }} placeholder={`Add to ${fmt(day, 'EEEE')}`} testId={`input-week-add-${day}`} />}
-      {!collapsedPast && open.length > 0 && <div className="divide-y divide-border/50">{open.map((t) => <TaskRow key={t.id} task={t} hideDate />)}</div>}
+      {!collapsedPast && open.length > 0 && <div className="divide-y divide-border/50">{open.map((t) => <TaskRow key={t.id} task={t} siblings={open} hideDate />)}</div>}
       {!collapsedPast && done.length > 0 && (
         <div>
           <button type="button" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone} className="inline-flex min-h-8 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <ChevronDown className={cn('size-3.5 transition-transform', !showDone && '-rotate-90')} /> {done.length} completed
           </button>
-          {showDone && <div className="divide-y divide-border/50">{done.map((t) => <TaskRow key={t.id} task={t} />)}</div>}
+          {showDone && <div className="divide-y divide-border/50">{done.map((t) => <TaskRow key={t.id} task={t} siblings={done} />)}</div>}
         </div>
       )}
     </section>
@@ -546,19 +552,19 @@ function DayView({ day }: { day: string }) {
           </div>
           <QuickAdd defaults={{ plannedDate: day }} placeholder={`Add to ${relDay(day).toLowerCase()}`} testId="input-day-quick-add" />
           <div className="mt-4 divide-y divide-border/60">
-            {list.length === 0 ? <EmptyState title="Nothing planned" body="Pull from the inbox on the right." /> : list.map((t) => <TaskRow key={t.id} task={t} hideDate />)}
+            {list.length === 0 ? <EmptyState title="Nothing planned" body="Pull from the inbox on the right." /> : list.map((t) => <TaskRow key={t.id} task={t} siblings={list} hideDate />)}
           </div>
         </div>
         {overdue.length > 0 && (
           <div className="surface rise p-5">
             <div className="mb-2 text-sm font-medium text-destructive">Carried over</div>
-            <div className="divide-y divide-border/60">{overdue.map((t) => <TaskRow key={t.id} task={t} />)}</div>
+            <div className="divide-y divide-border/60">{overdue.map((t) => <TaskRow key={t.id} task={t} siblings={overdue} />)}</div>
           </div>
         )}
         {reminders.length > 0 && (
           <div className="surface rise p-5">
             <div className="mb-2 text-sm font-medium" title="In-app only. Align has no background notification service.">Reminders due</div>
-            <div className="divide-y divide-border/60">{reminders.map((t) => <TaskRow key={t.id} task={t} />)}</div>
+            <div className="divide-y divide-border/60">{reminders.map((t) => <TaskRow key={t.id} task={t} siblings={reminders} />)}</div>
           </div>
         )}
       </div>

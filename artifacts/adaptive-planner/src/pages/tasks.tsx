@@ -137,7 +137,7 @@ export default function TasksPage() {
           groups.map((g) => (
             <div key={g.label || 'all'} className="mb-2 last:mb-0">
               {g.label && <div className="px-2 pb-1 pt-3 text-xs font-medium text-muted-foreground">{g.label}</div>}
-              <div className="divide-y divide-border/60">{g.items.map((t) => <TaskRow key={t.id} task={t} hideDate={view === 'today'} />)}</div>
+              <div className="divide-y divide-border/60">{g.items.map((t) => <TaskRow key={t.id} task={t} siblings={g.items} hideDate={view === 'today'} />)}</div>
             </div>
           ))
         )}

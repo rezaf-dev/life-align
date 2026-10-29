@@ -26,10 +26,12 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-- This MVP deliberately uses browser-local persistence rather than accounts and a backend. The brief prioritizes coherent everyday workflows and visual quality over infrastructure.
+- Planning data deliberately remains browser-local; AI conversations are stored separately in the browser. The API server is stateless and does not replace or migrate existing planning data.
 - Execution and outcomes must remain separate: completing an outreach task must never increase customer or revenue measurements.
 - Plan adaptations must preserve original commitments and important changes with reasons; editing should not erase the user's decision history.
-- Insights are deterministic, explicitly labeled observations, not claims of live AI analysis.
+- Built-in insights are deterministic observations. Ask Align uses real OpenRouter calls to propose edits, never to silently modify records.
+- AI uses `https://openrouter.ai/api/v1`, server-only `OPENROUTER_API_KEY`, and defaults to `openai/gpt-6-luna`. Optional server environment variable `OPENROUTER_MODEL` changes the model explicitly; never silently fall back to another model.
+- AI approval is an atomic server-validated transaction returning a workspace snapshot. The client refuses to replace state changed while the request was in flight. Reasons and before/after history are retained for consequential edits; original saved commitments are immutable even when empty.
 
 ## Product
 

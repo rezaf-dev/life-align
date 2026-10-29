@@ -19,6 +19,7 @@ import { useAppState } from '@/lib/store/store';
 import type { ReviewAnswers, ReviewSnapshot } from '@/lib/store/types';
 import { setNavGuard } from '@/lib/nav-guard';
 import { cn } from '@/lib/utils';
+import { AskButton } from '@/components/ai/ask-button';
 
 const QUESTIONS: { key: keyof ReviewAnswers; q: string; help: string }[] = [
   { key: 'wins', q: 'What actually moved forward?', help: 'Results and finished work, not effort.' },
@@ -54,6 +55,7 @@ function ReviewHistory() {
         description={due ? `A weekly review is due${lastWeekly ? `; the last one covered up to ${fmt(lastWeekly.periodEnd)}` : ''}.` : 'Up to date. Five questions, real numbers, decisions you approve.'}
         actions={
           <>
+            <AskButton focus={{ screen: 'reviews' }} label="Review with Align" />
             <Button variant="outline" asChild data-testid="button-new-monthly-review"><Link href="/reviews?start=monthly">Monthly review</Link></Button>
             <Button variant={due ? 'default' : 'outline'} asChild data-testid="button-new-weekly-review"><Link href="/reviews?start=weekly">Weekly review <ArrowRight /></Link></Button>
           </>

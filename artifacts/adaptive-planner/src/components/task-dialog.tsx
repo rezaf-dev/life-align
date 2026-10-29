@@ -1,3 +1,5 @@
+import { ListTree } from 'lucide-react';
+import { openAssistant } from '@/lib/ai/bus';
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -71,6 +73,18 @@ export function TaskDialog({
       onSubmit={submit}
       wide
     >
+      {task && (
+        <button
+          type="button"
+          onClick={() => { onOpenChange(false); openAssistant({ screen: 'task', taskId: task.id, fresh: true, send: `Break down "${task.title}" into a few concrete steps. Keep the original task as the parent.` }); }}
+          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/[0.04] px-3 py-2 text-left text-sm hover:bg-primary/[0.08]"
+          data-testid="button-task-breakdown-ai"
+        >
+          <ListTree className="size-4 text-primary" />
+          <span className="flex-1">Break this down with Align</span>
+          <span className="text-xs text-muted-foreground">steps nest under it</span>
+        </button>
+      )}
       <Field label="Title" htmlFor="task-title">
         <Input id="task-title" autoFocus value={f.title} onChange={(e) => set('title', e.target.value)} data-testid="input-task-title" />
       </Field>

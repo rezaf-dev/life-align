@@ -118,6 +118,9 @@ export function archiveTask(id: string, archived = true) {
 export function deleteTask(id: string) {
   update((d) => {
     d.tasks = d.tasks.filter((t) => t.id !== id);
+    d.tasks.forEach((t) => {
+      if (t.parentTaskId === id) delete t.parentTaskId;
+    });
   });
 }
 

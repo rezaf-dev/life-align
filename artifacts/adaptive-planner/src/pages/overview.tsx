@@ -23,6 +23,7 @@ import {
 import { useAppState } from '@/lib/store/store';
 import type { Goal } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { AskButton } from '@/components/ai/ask-button';
 
 function greeting() {
   const h = new Date().getHours();
@@ -132,13 +133,16 @@ export default function OverviewPage() {
             {greeting()}, <span className="italic text-primary">{state.settings.name || 'friend'}</span>.
           </h1>
         </div>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+        <AskButton focus={{ screen: 'overview' }} />
         {primary && (
-          <Button asChild data-testid={primary.test} className="self-start sm:self-auto">
+          <Button asChild data-testid={primary.test}>
             <Link href={primary.href}>
               {primary.label} <ArrowRight />
             </Link>
           </Button>
         )}
+        </div>
       </header>
 
       <div className="grid gap-5 lg:grid-cols-12">
@@ -185,7 +189,7 @@ export default function OverviewPage() {
               />
             ) : (
               <div className="divide-y divide-border/60">
-                {data.openToday.map((t) => <TaskRow key={t.id} task={t} hideDate />)}
+                {data.openToday.map((t) => <TaskRow key={t.id} task={t} siblings={data.openToday} hideDate />)}
               </div>
             )}
           </div>
@@ -211,7 +215,7 @@ export default function OverviewPage() {
                 </Button>
               }
             >
-              {data.overdue.slice(0, 8).map((t) => <TaskRow key={t.id} task={t} />)}
+              {data.overdue.slice(0, 8).map((t) => <TaskRow key={t.id} task={t} siblings={data.overdue.slice(0, 8)} />)}
               {data.overdue.length > 8 && (
                 <Link href="/tasks?view=overdue" className="block px-2 py-2 text-xs text-primary hover:underline">
                   See all {data.overdue.length} overdue
@@ -222,7 +226,7 @@ export default function OverviewPage() {
 
           {data.doneToday.length > 0 && (
             <Disclosure label="Completed today" count={data.doneToday.length} testId="button-toggle-done-today">
-              {data.doneToday.map((t) => <TaskRow key={t.id} task={t} />)}
+              {data.doneToday.map((t) => <TaskRow key={t.id} task={t} siblings={data.doneToday} />)}
             </Disclosure>
           )}
 

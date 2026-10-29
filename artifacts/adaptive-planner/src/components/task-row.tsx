@@ -98,7 +98,46 @@ export function ScheduleControl({ task, hideLabel }: { task: Task; hideLabel?: b
   );
 }
 
-export function TaskRow({
+type TaskRowProps = {
+  task: Task;
+  siblings?: Task[];
+  showGoal?: boolean;
+  compact?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (v: boolean) => void;
+  hideDate?: boolean;
+};
+
+const sameBucket = (a: Task, b: Task) => (a.plannedDate ?? '') === (b.plannedDate ?? '');
+
+/**
+ * Renders a task and, beneath it, its live sub-tasks that share the same day bucket.
+ * Sub-tasks nested this way are skipped at the root so lists never show them twice;
+ * sub-tasks scheduled on a different day stay at the root with a "part of" hint.
+ */
+export function TaskRow(props: TaskRowProps) {
+  const { tasks } = useAppState();
+  const t = props.task;
+  const visible = props.siblings ?? tasks;
+  const parent = t.parentTaskId ? tasks.find((x) => x.id === t.parentTaskId) : undefined;
+  if (!props.selectable && parent && !parent.archived && visible.some((x) => x.id === parent.id) && sameBucket(parent, t)) return null;
+  const children = props.selectable ? [] : visible.filter((c) => c.parentTaskId === t.id && !c.archived && sameBucket(t, c));
+  if (!children.length) return <TaskRowInner {...props} parent={parent} />;
+  const doneCount = children.filter((c) => c.status === 'done').length;
+  return (
+    <div data-testid={`group-task-${t.id}`}>
+      <TaskRowInner {...props} parent={parent} subCount={`${doneCount}/${children.length} steps`} />
+      <div className="ml-[1.35rem] border-l border-border/80 pl-2 sm:ml-[1.1rem]">
+        {children.map((c) => (
+          <TaskRowInner key={c.id} task={c} showGoal={false} compact={props.compact} hideDate={props.hideDate} nested />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TaskRowInner({
   task,
   showGoal = true,
   compact,
@@ -106,7 +145,13 @@ export function TaskRow({
   selected,
   onSelect,
   hideDate,
+  nested,
+  parent,
+  subCount,
 }: {
+  nested?: boolean;
+  parent?: Task;
+  subCount?: string;
   task: Task;
   showGoal?: boolean;
   compact?: boolean;
@@ -132,6 +177,8 @@ export function TaskRow({
 
   const meta: ReactElement[] = [];
   if (!compact) {
+    if (subCount) meta.push(<span key="s" className="font-num">{subCount}</span>);
+    if (parent && !nested) meta.push(<span key="p" className="truncate">part of {parent.title}</span>);
     if (showGoal && goal)
       meta.push(
         <span key="g" className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5">
@@ -149,7 +196,7 @@ export function TaskRow({
     <motion.div
       layout="position"
       transition={{ duration: 0.25 }}
-      className={cn('group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-muted/60 sm:gap-2.5', selected && 'bg-accent/60')}
+      className={cn('group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-muted/60 sm:gap-2.5', selected && 'bg-accent/60', nested && 'py-0.5')}
       data-testid={`row-task-${task.id}`}
     >
       {selectable ? (

@@ -58,6 +58,7 @@ import { formatValue, goalExecution, goalHealth, metricProgress, metricValueAt }
 import { useAppState } from '@/lib/store/store';
 import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { AskButton } from '@/components/ai/ask-button';
 
 type DialogKind =
   | null
@@ -139,6 +140,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <AskButton focus={{ screen: 'goal', goalId: goal.id }} label="Ask about this goal" />
           {goal.metrics.length > 0 ? (
             <Button onClick={() => setDialog({ log: undefined })} data-testid="button-log-result-top"><LineChart /> Log result</Button>
           ) : (
@@ -218,14 +220,14 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       </div>
 
       <Tabs defaultValue="actions" className="rise">
-        <TabsList className="mb-4 h-auto w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-auto">
+        <TabsList className="mb-4 flex h-auto w-full max-w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-auto">
           {[
             { v: 'actions', l: 'Actions', n: open.length },
             { v: 'milestones', l: 'Milestones', n: goal.milestones.filter((m) => !m.done).length },
             { v: 'results', l: 'Results', n: goal.metrics.length },
             { v: 'history', l: 'History', n: goal.history.length },
           ].map((t) => (
-            <TabsTrigger key={t.v} value={t.v} className="min-h-9 gap-1.5 rounded-lg px-3 data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none" data-testid={`tab-goal-${t.v}`}>
+            <TabsTrigger key={t.v} value={t.v} className="min-h-9 gap-1 rounded-lg px-2 text-xs data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none sm:gap-1.5 sm:px-3 sm:text-sm" data-testid={`tab-goal-${t.v}`}>
               {t.l} <span className="font-num text-xs opacity-70">{t.n}</span>
             </TabsTrigger>
           ))}
@@ -238,7 +240,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
               {open.length === 0 ? (
                 <EmptyState className="py-6" title="No open actions" body="What is the next physical step? Add it above." />
               ) : (
-                open.map((t) => <TaskRow key={t.id} task={t} showGoal={false} />)
+                open.map((t) => <TaskRow key={t.id} task={t} siblings={open} showGoal={false} />)
               )}
             </div>
             {done.length > 0 && (
@@ -246,7 +248,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
                 <button type="button" className="inline-flex min-h-9 items-center gap-1 rounded px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone} data-testid="button-toggle-done">
                   <ChevronDown className={cn('size-4 transition-transform', !showDone && '-rotate-90')} /> Completed &middot; {done.length}
                 </button>
-                {showDone && <div className="mt-1 divide-y divide-border/60">{done.map((t) => <TaskRow key={t.id} task={t} showGoal={false} />)}</div>}
+                {showDone && <div className="mt-1 divide-y divide-border/60">{done.map((t) => <TaskRow key={t.id} task={t} siblings={done} showGoal={false} />)}</div>}
               </div>
             )}
           </div>
@@ -331,7 +333,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
                     <span className="font-num text-xs text-muted-foreground">{fmt(e.at.slice(0, 10), 'MMM d, yyyy')}</span>
                   </div>
                   {(e.from || e.to) && e.kind !== 'milestone' && e.kind !== 'status' ? (
-                    <div className="mt-1 space-y-0.5 text-xs">
+                    <div className="mt-1 space-y-0.5 text-xs [overflow-wrap:anywhere]">
                       {e.from && <p className="text-muted-foreground line-through decoration-foreground/20">{e.from}</p>}
                       {e.to && <p>{e.to}</p>}
                     </div>

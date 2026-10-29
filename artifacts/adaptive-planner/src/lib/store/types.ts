@@ -55,7 +55,7 @@ export interface HistoryEvent {
   reason?: string;
   from?: string;
   to?: string;
-  source?: 'manual' | 'review';
+  source?: 'manual' | 'review' | 'ai';
 }
 
 export interface Goal {
@@ -79,6 +79,7 @@ export interface Task {
   title: string;
   goalId?: string;
   milestoneId?: string;
+  parentTaskId?: string;
   plannedDate?: string;
   dueDate?: string;
   priority: Priority;
@@ -172,6 +173,8 @@ export interface AppState {
   weekPlans: Record<string, WeekPlan>;
   periodNotes: Record<string, string>;
   reviews: Review[];
+  aiApplied?: string[];
+  aiHistory?: { at: string; summary: string }[];
 }
 
 export const AREAS: { value: Area; label: string }[] = [

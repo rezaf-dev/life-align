@@ -23,6 +23,10 @@ import { setSettings } from '@/lib/store/actions';
 import { inboxTasks, overdueTasks } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import { cn } from '@/lib/utils';
+import { AssistantPanel } from '@/components/ai/assistant-panel';
+import { openAssistant, toggleAssistant, useAssistantBus } from '@/lib/ai/bus';
+import { setAiStore, useAiStore } from '@/lib/ai/conversations';
+import { MessagesSquare, X } from 'lucide-react';
 
 const NAV = [
   { href: '/', label: 'Overview', icon: Compass, test: 'overview' },
@@ -125,6 +129,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hasDemo = goals.some((g) => g.isDemo);
   const [, navigate] = useLocation();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const assistant = useAssistantBus();
+  const aiStore = useAiStore();
+  const showIntro = !aiStore.introDismissed && aiStore.conversations.length === 0 && !assistant.open;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        toggleAssistant();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const onReq = (e: Event) => setPendingHref((e as CustomEvent<string>).detail);
@@ -167,6 +185,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PanelLeftOpen />
           </Button>
         )}
+        <Button
+          variant="outline"
+          className={cn('mb-4 border-primary/25 bg-primary/[0.05] text-foreground hover:bg-primary/10', collapsed ? 'mx-auto size-9 p-0' : 'w-full justify-start gap-2.5 px-2.5')}
+          onClick={() => openAssistant({})}
+          aria-label="Open planning assistant"
+          data-testid="button-open-assistant"
+        >
+          <MessagesSquare className="text-primary" />
+          {!collapsed && <span className="flex-1 text-left">Ask Align</span>}
+          {!collapsed && <kbd className="font-num text-[0.65rem] text-muted-foreground">Ctrl J</kbd>}
+        </Button>
         <NavList collapsed={collapsed} />
         <div className={cn('mt-2 space-y-2 border-t border-sidebar-border pt-3', collapsed && 'flex flex-col items-center')}>
           <ThemeToggle collapsed={collapsed} />
@@ -179,7 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn('flex min-w-0 flex-1 flex-col transition-[padding] duration-300', assistant.open && '2xl:pr-[440px]')}>
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/85 px-4 py-3 backdrop-blur md:hidden">
           {brand(false)}
           <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setMobileOpen(true)} data-testid="button-mobile-nav">
@@ -221,6 +250,28 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         />
       </div>
+      <AssistantPanel />
+      {!assistant.open && (
+        <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+          {showIntro && (
+            <div className="rise w-72 rounded-xl border border-card-border bg-card p-3.5 shadow-lg" data-testid="card-assistant-intro">
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  <div className="font-display text-[1.05rem]">Plan by just saying it.</div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Describe a goal, a messy week or a task. Align drafts the records; you approve each change.</p>
+                </div>
+                <button type="button" aria-label="Dismiss" onClick={() => setAiStore((d) => { d.introDismissed = true; })} className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-muted" data-testid="button-dismiss-assistant-intro">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <Button size="sm" className="mt-2.5 w-full" onClick={() => openAssistant({})} data-testid="button-intro-open-assistant">Try it</Button>
+            </div>
+          )}
+          <Button size="icon" className="size-12 rounded-full shadow-lg md:hidden" onClick={() => openAssistant({})} aria-label="Open planning assistant" data-testid="button-fab-assistant">
+            <MessagesSquare />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
