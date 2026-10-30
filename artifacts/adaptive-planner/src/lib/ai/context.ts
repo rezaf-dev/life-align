@@ -1,5 +1,6 @@
 import { addDaysIso, monthStartIso, nextMonday, todayIso, weekStartIso } from '@/lib/dates';
 import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt, measurementEntries, measurementPeriod, measurementTargetAt } from '@/lib/store/selectors';
+import { measurementActivePeriod } from '@workspace/api-zod';
 import type { AppState, Goal, Task } from '@/lib/store/types';
 import type { Operation, Screen } from './types';
 import { periodContext } from './context-periods';
@@ -47,7 +48,10 @@ export function compactGoal(g: Goal, deep: boolean, tasks: Task[], today = today
       baseline: m.baseline,
       target: measurementTargetAt(m, today),
       frequency: m.frequency ?? 'cumulative',
+      startDate: m.startDate,
+      fullPeriodTarget: m.target,
       period: measurementPeriod(m, today),
+      activePeriod: measurementActivePeriod(m, today),
       current: metricValueAt(m, today),
       hasRecordedValueInPeriod: measurementEntries(m, today).length > 0,
       recent: deep ? [...m.entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map((e) => ({
@@ -78,7 +82,7 @@ export function compactGoal(g: Goal, deep: boolean, tasks: Task[], today = today
         const direction = Math.sign(target - m.baseline) || 1;
         return {
           metricId: m.id, name: m.name, kind: m.kind, unit: m.unit,
-          current, target, frequency: m.frequency ?? 'cumulative', period,
+          current, target, fullPeriodTarget: m.target, startDate: m.startDate, frequency: m.frequency ?? 'cumulative', period, activePeriod: measurementActivePeriod(m, today),
           valueBasis: measurementEntries(m, today).length ? 'recorded results' : 'starting value only; no recorded result in this period',
           remaining: Math.max(0, (target - current) * direction),
           direction: direction > 0 ? 'increase' : 'decrease',

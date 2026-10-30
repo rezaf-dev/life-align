@@ -1,6 +1,42 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contributionAmount, contributionPercent, measurementEntrySchema, measurementTimeline, measurementValueAt, measurementPeriod, measurementPeriods, measurementEntries, measurementTargetAt, type MeasurementEvent } from '@workspace/api-zod';
+import { contributionAmount, contributionPercent, measurementEntrySchema, measurementTimeline, measurementValueAt, measurementPeriod, measurementPeriods, measurementEntries, measurementTargetAt, measurementActivePeriod, nextMeasurementStart, type MeasurementEvent } from '@workspace/api-zod';
+
+test('first monthly target uses fixed active days, resets normally, and never shrinks as days pass', () => {
+  const m = { frequency: 'monthly' as const, startDate: '2026-10-30', target: 30, baseline: 0 };
+  assert.equal(measurementTargetAt(m, '2026-10-29'), 60 / 31);
+  assert.equal(measurementTargetAt(m, '2026-10-30'), 60 / 31);
+  assert.equal(measurementTargetAt(m, '2026-10-31'), 60 / 31);
+  assert.equal(measurementTargetAt(m, '2026-11-01'), 30);
+  assert.equal(measurementTargetAt(m, '2026-09-30'), 0);
+  assert.ok(Math.abs(contributionPercent(m, 1, '2026-10-30')! - 100 / (60 / 31)) < 1e-10);
+  assert.equal(measurementActivePeriod(m, '2026-10-30')?.activeDays, 2);
+});
+test('weekly partials use Monday weeks and include Sunday and year boundaries', () => {
+  const m = { frequency: 'weekly' as const, startDate: '2026-12-31', target: 7 };
+  assert.equal(measurementTargetAt(m, '2026-12-31'), 4);
+  assert.equal(measurementTargetAt(m, '2027-01-03'), 4);
+  assert.equal(measurementTargetAt(m, '2027-01-04'), 7);
+  assert.equal(measurementTargetAt({ ...m, startDate: '2027-01-03' }, '2027-01-03'), 1);
+});
+test('next-period starts and leap February preserve full commitments', () => {
+  assert.equal(nextMeasurementStart('monthly', '2026-10-30'), '2026-11-01');
+  assert.equal(nextMeasurementStart('weekly', '2026-10-30'), '2026-11-02');
+  assert.equal(nextMeasurementStart('monthly', '2026-12-31'), '2027-01-01');
+  const m = { frequency: 'monthly' as const, target: 29, startDate: '2024-02-29' };
+  assert.equal(measurementTargetAt(m, '2024-02-29'), 1);
+  assert.equal(measurementTargetAt(m, '2024-03-01'), 29);
+  assert.equal(measurementTargetAt({ ...m, startDate: '2024-03-01' }, '2024-02-29'), 0);
+});
+test('dated target changes retain the original first-period adjustment', () => {
+  const m = { frequency: 'monthly' as const, target: 40, startDate: '2026-10-30',
+    targetHistory: [{ start: '0001-01-01', target: 30 }, { start: '2026-11-01', target: 40 }] };
+  assert.equal(measurementTargetAt(m, '2026-10-31'), 60 / 31);
+  assert.equal(measurementTargetAt(m, '2026-11-30'), 40);
+  assert.equal(measurementTargetAt(JSON.parse(JSON.stringify(m)), '2026-10-31'), 60 / 31);
+  assert.equal(measurementTargetAt({ frequency: 'cumulative', target: 30, startDate: '2026-10-30' }, '2026-10-01'), 30);
+  assert.equal(measurementTargetAt({ frequency: 'monthly', target: 30 }, '2026-10-30'), 30);
+});
 
 const observation = (id: string, value: number, date = '2024-01-01'): MeasurementEvent => ({ id, date, value });
 const result = (id: string, value: number, date = '2024-01-02', taskId = 'task', milestoneId = 'milestone'): MeasurementEvent => ({

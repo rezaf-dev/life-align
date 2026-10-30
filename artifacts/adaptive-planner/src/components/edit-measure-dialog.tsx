@@ -6,6 +6,9 @@ import { useToast } from '@/hooks/use-toast';
 import { updateMetric } from '@/lib/store/actions';
 import type { Metric, MetricKind } from '@/lib/store/types';
 import { flushWorkspace } from '@/lib/workspace-sync';
+import { MeasurementStartField } from '@/components/measurement-period';
+import { todayIso } from '@/lib/dates';
+import { isMeasurementDate } from '@workspace/api-zod';
 
 export function EditMeasureDialog({ goalId, metric, onClose }: {
   goalId: string;
@@ -17,6 +20,7 @@ export function EditMeasureDialog({ goalId, metric, onClose }: {
   const [kind, setKind] = useState<MetricKind>(metric.kind);
   const [unit, setUnit] = useState(metric.unit);
   const [baseline, setBaseline] = useState(String(metric.baseline));
+  const [startDate, setStartDate] = useState(metric.startDate ?? todayIso());
   const [pending, setPending] = useState(false);
   const [staged, setStaged] = useState(false);
   const [error, setError] = useState('');
@@ -24,8 +28,8 @@ export function EditMeasureDialog({ goalId, metric, onClose }: {
   const locked = metric.entries.length > 0;
   const recurring = !!metric.frequency && metric.frequency !== 'cumulative';
   const n = Number(baseline);
-  const valid = !!name.trim() && baseline.trim() !== '' && Number.isFinite(n) && (!recurring || n === 0);
-  const changed = name.trim() !== metric.name || kind !== metric.kind || unit.trim() !== metric.unit || n !== metric.baseline;
+  const valid = !!name.trim() && baseline.trim() !== '' && Number.isFinite(n) && (!recurring || (n === 0 && isMeasurementDate(startDate)));
+  const changed = name.trim() !== metric.name || kind !== metric.kind || unit.trim() !== metric.unit || n !== metric.baseline || (recurring && !locked && startDate !== metric.startDate);
   const frozen = pending || staged;
 
   const save = async () => {
@@ -34,7 +38,7 @@ export function EditMeasureDialog({ goalId, metric, onClose }: {
     setError('');
     try {
       if (!applied.current) {
-        updateMetric(goalId, metric.id, { name, kind, unit, baseline: n });
+        updateMetric(goalId, metric.id, { name, kind, unit, baseline: n, startDate: recurring && !locked ? startDate : metric.startDate });
         applied.current = true;
         setStaged(true);
       }
@@ -78,7 +82,8 @@ export function EditMeasureDialog({ goalId, metric, onClose }: {
           <Input id="edit-measure-baseline" type="number" step="any" value={baseline} onChange={(e) => setBaseline(e.target.value)} disabled={frozen || locked || recurring} data-testid="input-edit-measure-baseline" />
         </Field>
       </div>
-      {locked && <p className="text-xs text-muted-foreground" data-testid="text-edit-measure-history-protected">Units and starting value are locked because results already exist. Name and type can still be corrected. For different units, add a separate measure rather than reinterpreting past results.</p>}
+      {recurring && (metric.startDate || !locked) && <MeasurementStartField frequency={metric.frequency!} target={metric.target} unit={unit} value={startDate} onChange={setStartDate} disabled={frozen || locked} testId="edit-measure-start" />}
+      {locked && <p className="text-xs text-muted-foreground" data-testid="text-edit-measure-history-protected">Units, starting value, and start date are locked because results already exist. Name and type can still be corrected. For different units, add a separate measure rather than reinterpreting past results.</p>}
       {error && <p role="alert" className="text-sm text-destructive" data-testid="text-edit-measure-error">{error}</p>}
     </FormDialog>
   );

@@ -62,6 +62,8 @@ const healthMeta: Record<Health, { label: string; cls: string }> = {
   watch: { label: 'Watch', cls: 'text-warning bg-warning/10' },
   behind: { label: 'Behind pace', cls: 'text-destructive bg-destructive/10' },
   'no-data': { label: 'No metric', cls: 'text-muted-foreground bg-muted' },
+  'not-started': { label: 'Not started', cls: 'text-muted-foreground bg-muted' },
+  'just-started': { label: 'Just started', cls: 'text-muted-foreground bg-muted' },
 };
 
 export function HealthPill({ health }: { health: Health }) {

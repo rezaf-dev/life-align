@@ -42,6 +42,7 @@ export interface Metric {
   target: number;
   /** Missing frequency means the original cumulative measurement. */
   frequency?: 'cumulative' | 'weekly' | 'monthly';
+  startDate?: string;
   targetHistory?: { start: string; target: number }[];
   entries: MetricEntry[];
 }

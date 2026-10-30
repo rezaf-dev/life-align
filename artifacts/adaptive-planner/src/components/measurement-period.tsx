@@ -3,6 +3,11 @@ import { fmt, todayIso } from '@/lib/dates';
 import { measurementPeriod } from '@/lib/store/selectors';
 import type { Metric } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { Field } from '@/components/form-dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { isMeasurementDate, measurementActivePeriod, measurementTargetAt, nextMeasurementStart } from '@workspace/api-zod';
+import { formatValue } from '@/lib/store/selectors';
 
 export type Frequency = NonNullable<Metric['frequency']>;
 
@@ -16,11 +21,14 @@ export function formatPeriod(p: { start: string; end: string }, frequency?: Metr
 }
 
 /** Human label for the period containing `at`; null for cumulative. */
-export function periodLabel(m: { frequency?: Metric['frequency'] }, at?: string, withRange = true) {
+export function periodLabel(m: { frequency?: Metric['frequency']; startDate?: string }, at?: string, withRange = true) {
   const p = measurementPeriod(m, at);
   if (!p) return null;
   const isCurrent = !at || (todayIso() >= p.start && todayIso() <= p.end);
   const word = m.frequency === 'weekly' ? 'week' : 'month';
+  const active = measurementActivePeriod(m, at);
+  if (active?.notStarted) return `Starts ${fmt(m.startDate!, 'MMM d')}`;
+  if (active?.partial) return `First partial ${word}${withRange ? ` · ${fmt(active.activeStart, 'MMM d')}–${fmt(active.end, 'MMM d')}` : ''}`;
   const range = formatPeriod(p, m.frequency);
   if (isCurrent) return withRange ? `This ${word} \u00b7 ${range}` : `This ${word}`;
   return m.frequency === 'weekly' ? `Week ${range}` : range;
@@ -29,13 +37,40 @@ export function periodLabel(m: { frequency?: Metric['frequency'] }, at?: string,
 export const frequencyNoun = (f?: Metric['frequency']) => (f === 'weekly' ? 'per week' : f === 'monthly' ? 'per month' : 'overall');
 
 /** Small inline badge naming the measurement period. */
-export function PeriodTag({ metric, at, className, testId }: { metric: { frequency?: Metric['frequency'] }; at?: string; className?: string; testId?: string }) {
+export function PeriodTag({ metric, at, className, testId }: { metric: { frequency?: Metric['frequency']; startDate?: string }; at?: string; className?: string; testId?: string }) {
   const label = periodLabel(metric, at);
   if (!label) return null;
   return (
     <span className={cn('inline-flex items-center rounded bg-accent px-1.5 text-[0.68rem] font-normal text-accent-foreground', className)} data-testid={testId}>
       {label}
     </span>
+  );
+}
+
+/** Shared setup control: a fixed date plus an explicit first-period preview. */
+export function MeasurementStartField({ frequency, target, unit, value, onChange, disabled, testId = 'measure-start' }: {
+  frequency: Frequency; target: number; unit: string; value: string;
+  onChange: (date: string) => void; disabled?: boolean; testId?: string;
+}) {
+  if (frequency === 'cumulative') return null;
+  const today = todayIso();
+  const metric = { frequency, startDate: value, target };
+  const active = isMeasurementDate(value)
+    ? measurementActivePeriod(metric, value) : null;
+  return (
+    <Field label="Start measuring" htmlFor={testId} hint={disabled ? 'Start date is locked to preserve recorded periods.' : undefined}>
+      <div className="flex flex-wrap gap-2">
+        <Input id={testId} type="date" className="min-w-0 flex-1" value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} data-testid={`input-${testId}`} />
+        <Button type="button" variant="outline" disabled={disabled} onClick={() => onChange(value === today ? nextMeasurementStart(frequency, today) : today)} data-testid={`button-${testId}-toggle`}>
+          {value === today ? `Start next ${frequency === 'weekly' ? 'week' : 'month'}` : 'Start today'}
+        </Button>
+      </div>
+      {active && target > 0 && Number.isFinite(target) && (
+        <p className="text-xs leading-relaxed text-muted-foreground" data-testid={`text-${testId}-preview`}>
+          {active.partial ? `First partial ${frequency === 'weekly' ? 'week' : 'month'} (${fmt(active.activeStart, 'MMM d')}–${fmt(active.end, 'MMM d')}): ${formatValue(measurementTargetAt(metric, value), unit)}. Then ${formatValue(target, unit)} ${frequencyNoun(frequency)}.` : `${formatValue(target, unit)} ${frequencyNoun(frequency)}, starting ${fmt(value, 'MMM d')}.`}
+        </p>
+      )}
+    </Field>
   );
 }
 

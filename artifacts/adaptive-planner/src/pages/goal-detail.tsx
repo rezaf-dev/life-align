@@ -58,7 +58,8 @@ import {
   toggleMilestone,
 } from '@/lib/store/actions';
 import { formatValue, goalExecution, goalHealth, measurementBaseline, measurementPeriod, measurementPeriods, measurementTargetAt, metricProgress, metricTimeline, metricValueAt } from '@/lib/store/selectors';
-import { FrequencySelect, PeriodTag, formatPeriod, frequencyNoun, isRecurring, periodLabel, type Frequency } from '@/components/measurement-period';
+import { FrequencySelect, MeasurementStartField, PeriodTag, formatPeriod, frequencyNoun, isRecurring, periodLabel, type Frequency } from '@/components/measurement-period';
+import { isMeasurementDate, measurementActivePeriod } from '@workspace/api-zod';
 import { ContributionChips, MetricAttribution, MetricEntryRow, RecordResultDialog, type RecordResultTarget } from '@/components/contributions';
 import { useAppState } from '@/lib/store/store';
 import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
@@ -461,6 +462,8 @@ function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete
   };
   const base = measurementBaseline(metric);
   const target = measurementTargetAt(metric, at);
+  const activePeriod = measurementActivePeriod(metric, at);
+  const scheduled = activePeriod?.notStarted;
   const timeline = metricTimeline(metric, at);
   const entries = [...timeline].reverse();
   const values = timeline.map((p) => p.value);
@@ -486,8 +489,9 @@ function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete
           </div>
           <div className="font-num text-[1.35rem] leading-tight" data-testid={`text-metric-value-${metric.id}`}>
             {formatValue(value, metric.unit)}
-            <span className="text-sm text-muted-foreground"> / {formatValue(target, metric.unit)}</span>
+            <span className="text-sm text-muted-foreground">{scheduled ? ` · ${formatValue(metric.target, metric.unit)} ${frequencyNoun(metric.frequency)} from ${fmt(metric.startDate!, 'MMM d')}` : ` / ${formatValue(target, metric.unit)}`}</span>
           </div>
+          {activePeriod?.partial && !scheduled && <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-partial-target-${metric.id}`}>Adjusted first target · usual commitment: {formatValue(metric.target, metric.unit)} {frequencyNoun(metric.frequency)}.</p>}
         </div>
         {timeline.length > 1 && (
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-10 w-16 shrink-0 overflow-visible sm:w-24" aria-hidden>
@@ -504,7 +508,7 @@ function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete
             <div className="min-w-0 flex-1 text-center">
               <div className="truncate text-xs font-medium" data-testid={`text-period-label-${metric.id}`}>{periodLabel(metric, at)}</div>
               <div className="font-num text-[0.7rem] text-muted-foreground" data-testid={`text-period-summary-${metric.id}`}>
-                {remaining > 0 ? `${formatValue(remaining, metric.unit)} to go` : 'Target met'} &middot; {pct}%
+                {scheduled ? 'Not started · no target due yet' : <>{remaining > 0 ? `${formatValue(remaining, metric.unit)} to go` : 'Target met'} &middot; {pct}%</>}
               </div>
             </div>
             <Button size="icon" variant="ghost" className="size-9 shrink-0 sm:size-8" onClick={() => go(1)} disabled={!isHistorical} aria-label="Next period" data-testid={`button-period-next-${metric.id}`}><ChevronRight /></Button>
@@ -641,7 +645,7 @@ function MilestoneDialog({ goal, open, onClose }: { goal: Goal; open: boolean; o
 }
 
 function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onClose: () => void }) {
-  const init = { name: '', unit: '', baseline: '0', target: '', kind: 'outcome' as MetricKind, frequency: 'cumulative' as Frequency };
+  const init = { name: '', unit: '', baseline: '0', target: '', kind: 'outcome' as MetricKind, frequency: 'cumulative' as Frequency, startDate: todayIso() };
   const [f, setF] = useState(init);
   const [lastOpen, setLastOpen] = useState(false);
   const { toast } = useToast();
@@ -650,12 +654,12 @@ function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onCl
     if (open) setF(init);
   }
   const recurring = f.frequency !== 'cumulative';
-  const ok = !!f.name.trim() && f.target !== '' && !Number.isNaN(Number(f.target)) && !Number.isNaN(Number(f.baseline)) && (!recurring || Number(f.target) > 0);
+  const ok = !!f.name.trim() && f.target !== '' && Number.isFinite(Number(f.target)) && Number.isFinite(Number(f.baseline)) && (!recurring || (Number(f.target) > 0 && isMeasurementDate(f.startDate)));
   return (
     <FormDialog open={open} onOpenChange={(o) => !o && onClose()} title="Add metric" description="Outcomes prove the goal is working. Activity measures track effort you control." canSubmit={ok}
       onSubmit={() => {
         try {
-          addMetric(goal.id, { name: f.name.trim(), unit: f.unit.trim(), baseline: recurring ? 0 : Number(f.baseline) || 0, target: Number(f.target), kind: f.kind, frequency: f.frequency });
+          addMetric(goal.id, { name: f.name.trim(), unit: f.unit.trim(), baseline: recurring ? 0 : Number(f.baseline) || 0, target: Number(f.target), kind: f.kind, frequency: f.frequency, startDate: recurring ? f.startDate : undefined });
           onClose();
         } catch (err) {
           toast({ variant: 'destructive', title: 'Metric not added', description: err instanceof Error ? err.message : 'Check the values and try again.' });
@@ -681,6 +685,7 @@ function MetricDialog({ goal, open, onClose }: { goal: Goal; open: boolean; onCl
           <Input id="mt-target" type="number" step="any" min={recurring ? 0 : undefined} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} data-testid="input-metric-target" />
         </Field>
       </div>
+      {recurring && <MeasurementStartField frequency={f.frequency} target={Number(f.target)} unit={f.unit} value={f.startDate} onChange={(v) => setF({ ...f, startDate: v })} />}
     </FormDialog>
   );
 }

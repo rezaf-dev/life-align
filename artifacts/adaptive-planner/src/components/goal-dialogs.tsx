@@ -9,8 +9,9 @@ import { addDaysIso, todayIso } from '@/lib/dates';
 import { addGoal, editGoalBasics, logMetric } from '@/lib/store/actions';
 import { formatValue, metricValueAt, measurementTargetAt } from '@/lib/store/selectors';
 import { AREAS } from '@/lib/store/types';
-import { FrequencySelect, PeriodCreditHint, isRecurring, type Frequency } from '@/components/measurement-period';
+import { FrequencySelect, MeasurementStartField, PeriodCreditHint, isRecurring, type Frequency } from '@/components/measurement-period';
 import type { Area, Goal, MetricKind, Priority } from '@/lib/store/types';
+import { isMeasurementDate } from '@workspace/api-zod';
 
 export function AreaSelect({ value, onChange }: { value: Area; onChange: (a: Area) => void }) {
   return (
@@ -52,6 +53,7 @@ const blank = () => ({
   metricTarget: '',
   metricKind: 'outcome' as MetricKind,
   metricFrequency: 'cumulative' as Frequency,
+  metricStartDate: todayIso(),
 });
 
 export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -64,7 +66,7 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const set = <K extends keyof ReturnType<typeof blank>>(k: K, v: ReturnType<typeof blank>[K]) =>
     setF((p) => ({ ...p, [k]: v }));
   const goalRecurring = f.metricFrequency !== 'cumulative';
-  const metricOk = !f.metricName.trim() || (f.metricTarget !== '' && !Number.isNaN(Number(f.metricTarget)) && (!goalRecurring || Number(f.metricTarget) > 0));
+  const metricOk = !f.metricName.trim() || (f.metricTarget !== '' && Number.isFinite(Number(f.metricTarget)) && (!goalRecurring || (Number(f.metricTarget) > 0 && isMeasurementDate(f.metricStartDate))));
 
   return (
     <FormDialog
@@ -92,6 +94,7 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 target: Number(f.metricTarget),
                 kind: f.metricKind,
                 frequency: f.metricFrequency,
+                startDate: goalRecurring ? f.metricStartDate : undefined,
               }
             : undefined,
         });
@@ -133,6 +136,7 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <Field label="Measured" className="mt-3" hint={goalRecurring ? 'Each period starts at 0 with no carryover. Example: 30 hours each month.' : 'One running total from the start value toward the target.'}>
           <FrequencySelect value={f.metricFrequency} onChange={(v) => set('metricFrequency', v)} testId="select-goal-metric-frequency" />
         </Field>
+        {goalRecurring && <MeasurementStartField frequency={f.metricFrequency} target={Number(f.metricTarget)} unit={f.metricUnit} value={f.metricStartDate} onChange={(v) => set('metricStartDate', v)} testId="goal-measure-start" />}
       </div>
     </FormDialog>
   );

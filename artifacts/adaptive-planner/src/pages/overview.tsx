@@ -1,3 +1,4 @@
+import { measurementTargetAt } from '@workspace/api-zod';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, Check, ChevronDown, Flag, Info, LineChart, X } from 'lucide-react';
@@ -283,7 +284,7 @@ export default function OverviewPage() {
                         <PaceBar progress={h.progress} expected={h.expected} area={g.area} className="flex-1" />
                         <span className="shrink-0 text-right font-num text-xs">
                           {h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'No result yet'}{h.metric && isRecurring(h.metric) && <span className="text-muted-foreground"> {h.metric.frequency === 'weekly' ? 'this week' : 'this month'}</span>}
-                          {h.metric && <span className="text-muted-foreground"> / {formatValue(h.metric.target, h.metric.unit)}</span>}
+                          {h.metric && h.status !== 'not-started' && <span className="text-muted-foreground"> / {formatValue(measurementTargetAt(h.metric), h.metric.unit)}</span>}
                         </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">

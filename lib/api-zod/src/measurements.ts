@@ -19,13 +19,50 @@ export type MeasurementFrequency = 'cumulative' | 'weekly' | 'monthly';
 export const measurementFrequencySchema = z.enum(['cumulative', 'weekly', 'monthly']);
 export interface MeasurementPeriod { start: string; end: string }
 export interface MeasurementTarget { start: string; target: number }
+export interface MeasurementSchedule {
+  frequency?: MeasurementFrequency;
+  /** Fixed first active date. Never derived from today's remaining days. */
+  startDate?: string;
+}
+export function nextMeasurementStart(frequency: MeasurementFrequency, at = localToday()) {
+  const period = measurementPeriod({ frequency }, at);
+  if (!period) return at;
+  const date = new Date(`${period.end}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return isoDay(date);
+}
+/** Only unlogged legacy measures can be inferred without rewriting recorded history. */
+export function legacyMeasurementStart(
+  metric: MeasurementSchedule & { entries: MeasurementEvent[]; targetHistory?: MeasurementTarget[] }, createdAt: string,
+) {
+  if (metric.startDate || !metric.frequency || metric.frequency === 'cumulative' || metric.entries.length || metric.targetHistory?.length) return metric.startDate;
+  const date = createdAt.slice(0, 10);
+  return isMeasurementDate(date) ? date : undefined;
+}
+const calendarDays = (start: string, end: string) =>
+  Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000);
+/** Calendar boundary plus the active part of that period. */
+export function measurementActivePeriod(metric: MeasurementSchedule, at = localToday()) {
+  const period = measurementPeriod(metric, at);
+  if (!period) return null;
+  const start = metric.startDate && metric.startDate > period.start ? metric.startDate : period.start;
+  const activeDays = Math.max(0, calendarDays(start, period.end) + 1);
+  return {
+    ...period, activeStart: start, activeDays,
+    totalDays: calendarDays(period.start, period.end) + 1,
+    partial: activeDays > 0 && start > period.start,
+    notStarted: !!metric.startDate && at < metric.startDate,
+  };
+}
 /** A changed recurring target applies to this period onward, not past periods. */
 export function measurementTargetAt(
-  metric: { target: number; frequency?: MeasurementFrequency; targetHistory?: MeasurementTarget[] }, at = localToday(),
+  metric: MeasurementSchedule & { target: number; targetHistory?: MeasurementTarget[] }, at = localToday(),
 ) {
   if (!metric.frequency || metric.frequency === 'cumulative') return metric.target;
-  return [...(metric.targetHistory ?? [])].filter((item) => item.start <= at)
+  const target = [...(metric.targetHistory ?? [])].filter((item) => item.start <= at)
     .sort((a, b) => a.start.localeCompare(b.start)).at(-1)?.target ?? metric.target;
+  const period = measurementActivePeriod(metric, at)!;
+  return target * period.activeDays / period.totalDays;
 }
 type DatedMeasurement = { baseline: number; entries: MeasurementEvent[]; frequency?: MeasurementFrequency };
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -128,7 +165,7 @@ export function contributionAmount(
     return sum + entry.value;
   }, 0);
 }
-export function contributionPercent(metric: { baseline: number; target: number; frequency?: MeasurementFrequency; targetHistory?: MeasurementTarget[] }, amount: number, at?: string): number | null {
+export function contributionPercent(metric: MeasurementSchedule & { baseline: number; target: number; targetHistory?: MeasurementTarget[] }, amount: number, at?: string): number | null {
   const span = measurementTargetAt(metric, at) - measurementBaseline(metric);
   return span === 0 ? null : (amount / span) * 100;
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema } from '@workspace/api-zod';
+import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
 export type Operation = z.infer<typeof operationSchema>;
@@ -17,6 +17,7 @@ const metric = z.object({
   id, name: text, unit: text, kind: z.enum(['outcome', 'leading']),
   baseline: z.number(), target: z.number(),
   frequency: measurementFrequencySchema.optional(),
+  startDate: z.string().refine(isMeasurementDate, 'Choose a real measurement start date.').optional(),
   targetHistory: z.array(z.object({ start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), target: z.number().positive().finite() })).optional(),
   entries: z.array(measurementEntrySchema),
 }).passthrough().superRefine((m, ctx) => {
@@ -30,7 +31,13 @@ const goal = z.object({
   strategy: z.object({ summary: text, rationale: text, updatedAt: text }).passthrough(),
   milestones: z.array(milestone), metrics: z.array(metric), history: z.array(history),
   createdAt: text, isDemo: z.boolean(),
-}).passthrough();
+}).passthrough().transform((g) => {
+  for (const m of g.metrics) {
+    const startDate = legacyMeasurementStart(m, g.createdAt);
+    if (startDate) m.startDate = startDate;
+  }
+  return g;
+});
 const task = z.object({
   id, title: text, goalId: text.optional(), milestoneId: text.optional(), parentTaskId: text.optional(),
   plannedDate: text.optional(), dueDate: text.optional(), priority, effort: z.number().min(0),

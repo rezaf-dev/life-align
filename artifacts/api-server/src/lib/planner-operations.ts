@@ -205,7 +205,7 @@ export function applyOperations(raw: unknown, operations: Operation[], requestId
         if (!metric && op.metricId) throw new Error('The referenced metric no longer exists.');
         if (!metric) {
           if (op.target === undefined) throw new Error('A new metric needs a target.');
-          metric = { id: randomUUID(), name: requireText(op.name, 'Metric name'), unit: op.unit ?? '', kind: op.kind ?? 'outcome', baseline: op.baseline ?? 0, target: op.target, frequency: op.frequency, entries: [] };
+          metric = { id: randomUUID(), name: requireText(op.name, 'Metric name'), unit: op.unit ?? '', kind: op.kind ?? 'outcome', baseline: op.baseline ?? 0, target: op.target, frequency: op.frequency, startDate: op.frequency && op.frequency !== 'cumulative' ? validDate(op.date, 'Measurement date', true) : undefined, entries: [] };
           g.metrics.push(metric);
         }
         if (op.frequency && op.frequency !== (metric.frequency ?? 'cumulative')) throw new Error('Do not change the frequency of an existing measurement; create a separate one to preserve its history.');

@@ -1,7 +1,7 @@
 import { addDaysIso, daysBetween, todayIso } from '@/lib/dates';
 import type { AppState, Goal, Metric, ReviewSnapshot, Task } from './types';
-import { measurementValueAt, measurementBaseline, measurementPeriod, measurementTargetAt } from '@workspace/api-zod';
-export { measurementTimeline as metricTimeline, contributionAmount, contributionPercent, measurementPeriod, measurementPeriods, measurementEntries, measurementBaseline, measurementTargetAt } from '@workspace/api-zod';
+import { measurementValueAt, measurementBaseline, measurementPeriod, measurementTargetAt, measurementActivePeriod } from '@workspace/api-zod';
+export { measurementTimeline as metricTimeline, contributionAmount, contributionPercent, measurementPeriod, measurementPeriods, measurementEntries, measurementBaseline, measurementTargetAt, measurementActivePeriod } from '@workspace/api-zod';
 
 export const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
 
@@ -12,7 +12,7 @@ export function metricValueAt(m: Metric, at?: string) {
 export function metricProgress(m: Metric, at?: string) {
   const baseline = measurementBaseline(m);
   const span = measurementTargetAt(m, at) - baseline;
-  if (span === 0) return 1;
+  if (span === 0) return m.frequency && m.frequency !== 'cumulative' ? 0 : 1;
   return clamp((metricValueAt(m, at) - baseline) / span);
 }
 
@@ -20,7 +20,7 @@ export function lastEntryDate(m: Metric) {
   return m.entries.reduce<string | undefined>((acc, e) => (!acc || e.date > acc ? e.date : acc), undefined);
 }
 
-export type Health = 'achieved' | 'on-track' | 'watch' | 'behind' | 'no-data';
+export type Health = 'achieved' | 'on-track' | 'watch' | 'behind' | 'no-data' | 'not-started' | 'just-started';
 
 export function primaryMetric(g: Goal) {
   return g.metrics.find((m) => m.kind === 'outcome') ?? g.metrics[0];
@@ -33,8 +33,13 @@ export function goalHealth(g: Goal, t = todayIso()) {
   const expected = clamp(daysBetween(start, t) / total);
   if (!m) return { status: 'no-data' as Health, progress: 0, expected, metric: undefined };
   const period = measurementPeriod(m, t);
-  const periodExpected = period ? clamp((daysBetween(period.start, t) + 1) / (daysBetween(period.start, period.end) + 1)) : expected;
+  const active = measurementActivePeriod(m, t);
+  // Today's workday is not over: compare against completed active days.
+  const periodExpected = active ? clamp(daysBetween(active.activeStart, t) / Math.max(1, active.activeDays)) : expected;
   const progress = metricProgress(m, t);
+  if (period && m.startDate && t <= m.startDate) {
+    return { status: (t < m.startDate ? 'not-started' : 'just-started') as Health, progress, expected: 0, metric: m };
+  }
   const gap = progress - periodExpected;
   const status: Health =
     progress >= 1 && !period ? 'achieved' : gap >= -0.1 ? 'on-track' : gap >= -0.25 ? 'watch' : 'behind';
@@ -136,7 +141,7 @@ export function computeSnapshot(
 }
 
 export function formatValue(v: number, unit: string) {
-  const n = Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const n = Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
   if (unit === '$' || unit === 'USD') return `$${n}`;
   return unit ? `${n} ${unit}` : n;
 }

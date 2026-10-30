@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 test('recurring task results persist frequency, reset by work date, and keep task completion separate', () => {
-  addMetric('goal', { name: 'Project hours', unit: 'hours', kind: 'leading', frequency: 'monthly', baseline: 0, target: 30 });
+  addMetric('goal', { name: 'Project hours', unit: 'hours', kind: 'leading', frequency: 'monthly', baseline: 0, target: 30, startDate: '2024-01-01' });
   const id = getState().goals[0].metrics[1].id;
   recordContribution('goal', id, { taskId: 'task', amount: 20, date: '2024-01-31' });
   recordContribution('goal', id, { taskId: 'task', amount: 6, date: '2024-02-01' });
@@ -48,12 +48,13 @@ test('recurring goal pace uses the calendar period and never calls a whole goal 
   const g = structuredClone(getState().goals[0]);
   g.metrics = [{ id: 'hours', name: 'Hours', unit: 'h', kind: 'leading', baseline: 0, target: 30, frequency: 'monthly', entries: [{ id: 'reading', date: '2024-01-15', value: 30 }] }];
   assert.equal(goalHealth(g, '2024-01-15').status, 'on-track');
-  assert.equal(goalHealth(g, '2024-01-15').expected, 15 / 31);
+  assert.equal(goalHealth(g, '2024-01-15').expected, 14 / 31);
   assert.equal(goalHealth(g, '2024-02-01').progress, 0);
   assert.equal(g.status, 'active');
 });
 test('target edits keep previous periods intact through server validation and account reload', () => {
   changeMetricTarget('goal', 'metric', 30, 'Monthly hours', 'monthly');
+  updateMetric('goal', 'metric', { ...getState().goals[0].metrics[0], startDate: '2024-01-01' });
   recordContribution('goal', 'metric', { taskId: 'task', amount: 15, date: '2024-01-01' });
   changeMetricTarget('goal', 'metric', 40, 'More time this month');
   const saved = applyOperations(getState(), [{ key: 'preserve-config', type: 'update_task', taskId: 'task', notes: 'Preserve metric configuration' }], 'recurring-preservation').state;

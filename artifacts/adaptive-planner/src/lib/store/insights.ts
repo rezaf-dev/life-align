@@ -6,6 +6,9 @@ import {
   isOpen,
   lastEntryDate,
   metricValueAt,
+  measurementTargetAt,
+  measurementBaseline,
+  measurementPeriod,
   overdueTasks,
   tasksInRange,
 } from './selectors';
@@ -45,12 +48,15 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
     const health = goalHealth(g, today);
     if (health.metric && (health.status === 'behind' || health.status === 'watch')) {
       const m = health.metric;
-      const expectedValue = m.baseline + (m.target - m.baseline) * health.expected;
+      const target = measurementTargetAt(m, today);
+      const baseline = measurementBaseline(m);
+      const expectedValue = baseline + (target - baseline) * health.expected;
+      const period = measurementPeriod(m, today);
       out.push({
         id: `pace-${g.id}`,
         tone: health.status === 'behind' ? 'warning' : 'notice',
         title: `${m.name} is behind linear pace`,
-        detail: `${formatValue(metricValueAt(m), m.unit)} now; a straight line to ${formatValue(m.target, m.unit)} by ${fmt(g.targetDate)} would be about ${formatValue(Math.round(expectedValue * 10) / 10, m.unit)} today.`,
+        detail: `${formatValue(metricValueAt(m, today), m.unit)} now; a straight line to ${formatValue(target, m.unit)} by ${fmt(period?.end ?? g.targetDate)} would be about ${formatValue(Math.round(expectedValue * 10) / 10, m.unit)} today.`,
         href: `/goals/${g.id}`,
         rule: 'Latest outcome value vs. straight line from start to target date',
       });

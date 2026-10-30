@@ -167,7 +167,7 @@ export interface GoalInput {
   targetDate: string;
   strategy?: string;
   rationale?: string;
-  metric?: { name: string; unit: string; baseline: number; target: number; kind: MetricKind; frequency?: Metric['frequency'] };
+  metric?: { name: string; unit: string; baseline: number; target: number; kind: MetricKind; frequency?: Metric['frequency']; startDate?: string };
 }
 
 export function addGoal(input: GoalInput, isDemo = false) {
@@ -191,7 +191,7 @@ function buildGoal(id: string, input: GoalInput, isDemo: boolean): Goal {
     strategy: { summary: input.strategy ?? '', rationale: input.rationale ?? '', updatedAt: nowStamp() },
     milestones: [],
     metrics: input.metric
-      ? [{ id: uid(), entries: [], ...input.metric }]
+      ? [{ id: uid(), entries: [], ...input.metric, startDate: input.metric.frequency && input.metric.frequency !== 'cumulative' ? input.metric.startDate ?? todayIso() : undefined }]
       : [],
     history: [ev({ kind: 'created', summary: 'Goal created' })],
     createdAt: nowStamp(),
@@ -246,6 +246,7 @@ export function changeMetricTarget(goalId: string, metricId: string, target: num
     const from = `${m.target} (${m.frequency ?? 'cumulative'})`;
     if (nextFrequency !== (m.frequency ?? 'cumulative')) {
       delete m.targetHistory;
+      m.startDate = nextFrequency === 'cumulative' ? undefined : todayIso();
     } else if (nextFrequency !== 'cumulative' && target !== m.target) {
       const start = measurementPeriod(m, todayIso())!.start;
       const previous = m.targetHistory ?? [{ start: '0001-01-01', target: m.target }];
@@ -336,15 +337,16 @@ export function deleteMilestone(goalId: string, msId: string) {
   });
 }
 
-function validateMetricDefinition(m: Pick<Metric, 'baseline' | 'target' | 'frequency'>) {
+function validateMetricDefinition(m: Pick<Metric, 'baseline' | 'target' | 'frequency' | 'startDate'>) {
   if (!Number.isFinite(m.target) || !Number.isFinite(m.baseline)) throw new Error('Enter a valid starting value and target.');
+  if (m.startDate && !isMeasurementDate(m.startDate)) throw new Error('Choose a real measurement start date.');
   if (m.frequency && m.frequency !== 'cumulative' && (m.baseline !== 0 || m.target <= 0)) throw new Error('Recurring measurements start at zero and need a positive period target.');
 }
 export function addMetric(goalId: string, m: Omit<Metric, 'id' | 'entries'>) {
   validateMetricDefinition(m);
   update((d) => {
     const g = findGoal(d, goalId);
-    g.metrics.push({ ...m, id: uid(), entries: [] });
+    g.metrics.push({ ...m, startDate: m.frequency && m.frequency !== 'cumulative' ? m.startDate ?? todayIso() : undefined, id: uid(), entries: [] });
     g.history.unshift(ev({ kind: 'metric', summary: `Now measuring: ${m.name}` }));
   });
 }
@@ -353,7 +355,7 @@ export function addMetric(goalId: string, m: Omit<Metric, 'id' | 'entries'>) {
 export function updateMetric(
   goalId: string,
   metricId: string,
-  patch: Pick<Metric, 'name' | 'unit' | 'kind' | 'baseline'>,
+  patch: Pick<Metric, 'name' | 'unit' | 'kind' | 'baseline'> & Pick<Partial<Metric>, 'startDate'>,
 ) {
   const name = patch.name.trim();
   const unit = patch.unit.trim();
@@ -363,17 +365,21 @@ export function updateMetric(
     const goal = findGoal(d, goalId);
     const metric = goal.metrics.find((m) => m.id === metricId);
     if (!metric) throw new Error('That measure no longer exists.');
+    const startDate = patch.startDate ?? metric.startDate;
+    if (metric.entries.length && startDate !== metric.startDate) {
+      throw new Error('The start date is locked to preserve recorded periods.');
+    }
     if (metric.entries.length && (unit !== metric.unit || patch.baseline !== metric.baseline)) {
       throw new Error('Units and starting value cannot change after results are recorded. Add a separate measure to keep those results accurate.');
     }
-    validateMetricDefinition({ ...metric, baseline: patch.baseline });
+    validateMetricDefinition({ ...metric, baseline: patch.baseline, startDate });
     const label = (m: Pick<Metric, 'name' | 'unit' | 'kind' | 'baseline'>) =>
       `${m.name} · ${m.kind === 'outcome' ? 'Result' : 'Activity'} · ${m.unit || 'no unit'} · starting at ${m.baseline}`;
-    const from = label(metric);
-    const next = { name, unit, kind: patch.kind, baseline: patch.baseline };
-    if (metric.name === name && metric.unit === unit && metric.kind === patch.kind && metric.baseline === patch.baseline) return;
+    const from = `${label(metric)}${metric.startDate ? ` · starts ${metric.startDate}` : ''}`;
+    const next = { name, unit, kind: patch.kind, baseline: patch.baseline, startDate };
+    if (metric.name === name && metric.unit === unit && metric.kind === patch.kind && metric.baseline === patch.baseline && metric.startDate === startDate) return;
     Object.assign(metric, next);
-    goal.history.unshift(ev({ kind: 'metric', summary: `Measure updated: ${name}`, from, to: label(metric) }));
+    goal.history.unshift(ev({ kind: 'metric', summary: `Measure updated: ${name}`, from, to: `${label(metric)}${metric.startDate ? ` · starts ${metric.startDate}` : ''}` }));
   });
 }
 

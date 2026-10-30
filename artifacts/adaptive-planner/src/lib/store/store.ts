@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { AppState } from './types';
+import { legacyMeasurementStart } from '@workspace/api-zod';
 
 const listeners = new Set<() => void>();
 let writer: ((next: AppState) => void) | null = null;
@@ -33,7 +34,14 @@ export function replaceState(next: AppState) {
   emit();
 }
 
-export function hydrateState(next: AppState) { state = next; emit(); }
+export function hydrateState(next: AppState) {
+  state = structuredClone(next);
+  for (const goal of state.goals) for (const metric of goal.metrics) {
+    const startDate = legacyMeasurementStart(metric, goal.createdAt);
+    if (startDate) metric.startDate = startDate;
+  }
+  emit();
+}
 export function setWorkspaceWriter(next: ((state: AppState) => void) | null) { writer = next; }
 
 export function update(fn: (draft: AppState) => void) {

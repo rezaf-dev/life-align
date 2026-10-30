@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { NewGoalDialog } from '@/components/goal-dialogs';
 import { AreaTag, EmptyState, HealthPill, PageHeader, PaceBar, SampleMark, StatusPill } from '@/components/primitives';
 import { fmt, relDay, todayIso } from '@/lib/dates';
-import { formatValue, goalExecution, goalHealth, metricValueAt } from '@/lib/store/selectors';
+import { formatValue, goalExecution, goalHealth, metricValueAt, measurementTargetAt } from '@/lib/store/selectors';
 import { isRecurring } from '@/components/measurement-period';
 import { useAppState } from '@/lib/store/store';
 import { AREAS } from '@/lib/store/types';
@@ -131,7 +131,7 @@ export default function GoalsPage() {
                     <PaceBar progress={h.progress} expected={g.status === 'active' ? h.expected : undefined} area={g.area} />
                     <div className="mt-2 flex justify-between font-num text-xs text-muted-foreground">
                       <span className="text-foreground">{h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : '—'}{h.metric && isRecurring(h.metric) && <span className="text-muted-foreground"> {h.metric.frequency === 'weekly' ? 'this week' : 'this month'}</span>}</span>
-                      <span>{h.metric ? formatValue(h.metric.target, h.metric.unit) : ''}</span>
+                      <span>{h.metric ? h.status === 'not-started' ? `Starts ${fmt(h.metric.startDate!, 'MMM d')}` : formatValue(measurementTargetAt(h.metric), h.metric.unit) : ''}</span>
                     </div>
                   </div>
                   <div className="space-y-0.5 text-xs text-muted-foreground md:col-span-2 md:text-right">
