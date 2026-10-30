@@ -9,6 +9,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/app-shell';
 import { TaskCompletionProvider } from '@/components/task-completion';
+import { WorkSessionProvider } from '@/components/work-session-provider';
 import { AccessProvider } from '@/components/auth/access-provider';
 import { AuthBackdrop } from '@/components/auth/auth-chrome';
 import { PrivateRoute } from '@/components/auth/gates';
@@ -158,6 +159,7 @@ function PrivateApp() {
   return (
     <PrivateRoute>
       <TaskCompletionProvider>
+      <WorkSessionProvider>
       <AppShell>
         <RoutedErrorBoundary>
           <motion.div
@@ -180,6 +182,7 @@ function PrivateApp() {
           </motion.div>
         </RoutedErrorBoundary>
       </AppShell>
+      </WorkSessionProvider>
       </TaskCompletionProvider>
     </PrivateRoute>
   );

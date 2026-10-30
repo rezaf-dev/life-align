@@ -1,4 +1,5 @@
-import { measurementTargetAt } from '@workspace/api-zod';
+import { measurementTargetAt, plannedWorkMinutes } from '@workspace/api-zod';
+import { WorkSessionsPanel } from '@/components/work-sessions';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, Check, ChevronDown, Flag, Info, LineChart, X } from 'lucide-react';
@@ -96,7 +97,7 @@ export default function OverviewPage() {
     const active = state.goals.filter((g) => g.status === 'active');
     const weekTasks = tasksInRange(state.tasks, ws, addDaysIso(ws, 6));
     const plan = state.weekPlans[ws];
-    const effort = weekTasks.reduce((a, t) => a + t.effort, 0);
+    const effort = plannedWorkMinutes(state, ws, addDaysIso(ws, 6));
     const milestones = active
       .flatMap((g) => g.milestones.filter((m) => !m.done).map((m) => ({ ...m, goal: g })))
       .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))
@@ -149,9 +150,9 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-12">
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-12">
         {/* TODAY */}
-        <section className="surface rise p-3 sm:p-5 lg:col-span-7" aria-labelledby="today-h">
+        <section className="surface rise min-w-0 p-3 sm:p-5 lg:col-span-7" aria-labelledby="today-h">
           <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
             <h2 id="today-h" className="font-display text-xl">Today</h2>
             <span className="text-xs text-muted-foreground" data-testid="text-today-progress">{summary}</span>
@@ -197,6 +198,8 @@ export default function OverviewPage() {
               </div>
             )}
           </div>
+
+          {state.goals.length > 0 && <WorkSessionsPanel start={today} end={today} defaultDate={today} title="Today's work sessions" />}
 
           {data.overdue.length > 0 && (
             <Disclosure
@@ -258,7 +261,7 @@ export default function OverviewPage() {
         </section>
 
         {/* RIGHT RAIL */}
-        <div className="space-y-5 lg:col-span-5">
+        <div className="min-w-0 space-y-5 lg:col-span-5">
           <section className="surface rise p-4 sm:p-5" style={{ animationDelay: '80ms' }} aria-labelledby="health-h">
             <div className="mb-3 flex items-baseline justify-between">
               <h2 id="health-h" className="font-display text-xl">Goals</h2>

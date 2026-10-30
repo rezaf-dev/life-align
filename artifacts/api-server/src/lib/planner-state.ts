@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart } from '@workspace/api-zod';
+import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart, workSessionSchema, sessionLedgerIssues } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
 export type Operation = z.infer<typeof operationSchema>;
@@ -52,6 +52,7 @@ export const stateSchema = z.object({
   version: z.literal(1),
   settings: z.object({ name: text, theme: z.enum(['light', 'dark']), sidebarCollapsed: z.boolean(), onboardedFresh: z.boolean() }).passthrough(),
   goals: z.array(goal).max(5000), tasks: z.array(task).max(30000),
+  sessions: z.array(workSessionSchema).max(30000).optional(),
   weekPlans: z.record(text, z.object({
     weekStart: text, focus: text, capacityMinutes: z.number(), finalized: z.boolean(),
     finalizedAt: text.optional(), commitments: z.array(commitment),
@@ -73,7 +74,9 @@ export const stateSchema = z.object({
   }).passthrough()),
   aiApplied: z.array(text).optional(),
   aiHistory: z.array(z.object({ at: text, summary: text })).optional(),
-}).passthrough();
+}).passthrough().superRefine((state, ctx) => {
+  for (const message of sessionLedgerIssues(state)) ctx.addIssue({ code: 'custom', path: ['sessions'], message });
+});
 export type Workspace = z.infer<typeof stateSchema>;
 
 export function requireText(value: string | undefined, label: string): string {

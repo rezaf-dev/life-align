@@ -15,6 +15,7 @@ It keeps an important distinction clear: **doing the work and achieving the resu
 - **Goals and milestones** — define outcomes, organize supporting work, and adapt your strategy.
 - **Weekly planning** — make realistic commitments based on your available capacity.
 - **Tasks and subtasks** — organize work, link it to goals and milestones, and schedule recurring tasks.
+- **Work sessions** — reserve project time, log actual durations, and split time across tasks or unplanned work without counting it twice.
 - **Measured contributions** — record actual results against tasks or milestones and see how much they contributed to a goal.
 - **Flexible measurements** — track cumulative results, weekly targets, or monthly targets, such as **30 project hours per month**.
 - **Period history** — browse earlier weeks and months without losing their measurements or targets.
@@ -41,6 +42,16 @@ Recurring measurements:
 - Keep effort targets separate from overall goal completion.
 
 Existing cumulative measurements retain their original behavior. Once a measurement has entries, create a separate measurement to use a different frequency rather than reinterpreting its history.
+
+### Work sessions: time spent, not tasks completed
+
+Use **Plan session** in Today, Planner, or a goal's **Sessions** tab to reserve time. Choose a goal, an optional hours/minutes measure, a date and duration, and any tasks you expect to work on. Sessions can repeat daily, weekly, or monthly. Planning adds no measured progress.
+
+Use **Log time** afterward, or **Log work** for something you did without a plan. Enter actual minutes and optionally split them across tasks. For example, 40 minutes setting up email plus 20 minutes fixing a deployment count as **one hour** toward a monthly project-hours measure. Any unallocated remainder counts as general project work. Tasks can remain unfinished.
+
+Correcting or deleting logged time updates its original contribution rather than adding another. Finish an already-attributed task without recording the same hours again; its completion dialog reminds you when session time has already been recorded.
+
+To replace an existing “work for one hour” task with a time reservation, choose **Convert to work session** from its task menu. Conversion is explicit: the original task is archived and its past results are preserved. Sessions without a compatible time measure remain time-only. No timer is required.
 
 ## Technology
 

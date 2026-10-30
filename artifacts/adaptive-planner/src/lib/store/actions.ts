@@ -278,6 +278,7 @@ export function setGoalStatus(id: string, status: GoalStatus, reason: string, so
 export function deleteGoal(id: string) {
   update((d) => {
     d.goals = d.goals.filter((g) => g.id !== id);
+    if (d.sessions) d.sessions = d.sessions.filter((s) => s.goalId !== id);
     d.tasks.forEach((t) => {
       if (t.goalId === id) {
         t.goalId = undefined;
@@ -388,6 +389,7 @@ export function deleteMetric(goalId: string, metricId: string) {
     const g = findGoal(d, goalId);
     const m = g.metrics.find((x) => x.id === metricId);
     g.metrics = g.metrics.filter((x) => x.id !== metricId);
+    d.sessions?.forEach((s) => { if (s.goalId === goalId && s.metricId === metricId) delete s.metricId; });
     if (m) g.history.unshift(ev({ kind: 'metric', summary: `Stopped measuring: ${m.name}` }));
   });
 }
@@ -454,6 +456,7 @@ export function editContribution(goalId: string, metricId: string, entryId: stri
     const metric = goal.metrics.find((m) => m.id === metricId);
     const entry = metric?.entries.find((e) => e.id === entryId);
     if (!metric || !entry || entry.mode !== 'contribution') throw new Error('That contribution no longer exists.');
+    if (entry.source?.sessionId) throw new Error('Edit this time in Work sessions so its duration and task allocations stay consistent.');
     const before = `${entry.value} ${metric.unit} on ${entry.date}`;
     entry.value = patch.amount; entry.date = patch.date; entry.note = patch.note?.trim() || undefined;
     metric.entries.sort((a, b) => a.date.localeCompare(b.date));
@@ -469,6 +472,7 @@ export function deleteMetricEntry(goalId: string, metricId: string, entryId: str
     const goal = findGoal(d, goalId);
     const m = goal.metrics.find((x) => x.id === metricId);
     const entry = m?.entries.find((e) => e.id === entryId);
+    if (entry?.source?.sessionId) throw new Error('Delete or edit this contribution through its work session.');
     if (entry?.mode === 'contribution') goal.history.unshift(ev({
       kind: 'metric', summary: `Removed contribution to ${m!.name}: ${entry.value} ${m!.unit}`,
       from: `${entry.source?.taskTitle ?? entry.source?.milestoneTitle}: ${entry.value}`,
@@ -505,6 +509,12 @@ export function splitGoal(
     g.history.unshift(ev({ kind: 'split', summary: `Split into "${opts.title}"`, reason: opts.reason }));
     d.tasks.forEach((t) => {
       if (t.goalId === id && t.milestoneId && opts.milestoneIds.includes(t.milestoneId)) t.goalId = newId;
+    });
+    d.sessions?.forEach((s) => {
+      if (s.goalId === id && s.metricId && opts.metricIds.includes(s.metricId)) {
+        s.goalId = newId;
+        s.taskIds = s.taskIds.filter((taskId) => d.tasks.some((t) => t.id === taskId && t.goalId === newId));
+      }
     });
     d.goals.unshift(child);
   });
@@ -624,6 +634,7 @@ export function removeSampleData() {
   update((d) => {
     const demoGoals = new Set(d.goals.filter((g) => g.isDemo).map((g) => g.id));
     d.goals = d.goals.filter((g) => !g.isDemo);
+    if (d.sessions) d.sessions = d.sessions.filter((s) => !demoGoals.has(s.goalId));
     d.tasks = d.tasks.filter((t) => !t.isDemo);
     d.tasks.forEach((t) => {
       if (t.goalId && demoGoals.has(t.goalId)) {

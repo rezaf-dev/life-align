@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
-import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Repeat, Trash2, TrendingUp } from 'lucide-react';
+import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Repeat, Timer, Trash2, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -24,6 +24,7 @@ import { effortLabel, isOverdue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import type { Task } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { useWorkSessionActions } from '@/components/work-session-provider';
 
 /** Compact, always-visible schedule control. Uses the existing rescheduleTasks action. */
 export function ScheduleControl({ task, hideLabel }: { task: Task; hideLabel?: boolean }) {
@@ -168,6 +169,7 @@ function TaskRowInner({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [recording, setRecording] = useState(false);
+  const sessions = useWorkSessionActions();
   const goal = goals.find((g) => g.id === task.goalId);
   const done = task.status === 'done';
   const today = todayIso();
@@ -266,6 +268,11 @@ function TaskRowInner({
           {goal && goal.metrics.length > 0 && (
             <DropdownMenuItem onSelect={() => setRecording(true)} data-testid={`menu-record-result-${task.id}`}>
               <TrendingUp /> Record result
+            </DropdownMenuItem>
+          )}
+          {goal && task.status === 'open' && !task.archived && (
+            <DropdownMenuItem onSelect={() => sessions.convert(task, goal)} data-testid={`menu-convert-session-${task.id}`}>
+              <Timer /> Convert to work session
             </DropdownMenuItem>
           )}
           {goal && (

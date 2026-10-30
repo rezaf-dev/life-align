@@ -1,6 +1,6 @@
 import { addDaysIso, monthStartIso, nextMonday, todayIso, weekStartIso } from '@/lib/dates';
 import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt, measurementEntries, measurementPeriod, measurementTargetAt } from '@/lib/store/selectors';
-import { measurementActivePeriod } from '@workspace/api-zod';
+import { measurementActivePeriod, plannedWorkMinutes } from '@workspace/api-zod';
 import type { AppState, Goal, Task } from '@/lib/store/types';
 import type { Operation, Screen } from './types';
 import { periodContext } from './context-periods';
@@ -163,6 +163,7 @@ export function buildContext(
       focus: p.focus,
       capacityMinutes: p.capacityMinutes,
       finalized: p.finalized,
+      reservedMinutes: plannedWorkMinutes(state, key, addDaysIso(key, 6)),
       commitments: p.commitments.map((c) => ({ taskId: c.taskId, title: c.title, plannedDate: c.plannedDate, effort: c.effort })),
     };
   };
@@ -194,6 +195,15 @@ export function buildContext(
     goals: activeGoals.filter((g) => g.id !== focusGoal?.id).map((g) => compactGoal(g, opts.screen === 'goals' || wantsReview || msg.includes(g.title.toLowerCase()), state.tasks)),
     pastGoals: archivedGoals,
     tasks: [...relevant.values()].map(compactTask),
+    workSessions: [...(state.sessions ?? [])]
+      .filter((s) => focusGoal ? s.goalId === focusGoal.id : (s.date ?? s.plannedDate ?? '') >= recentStart)
+      .sort((a, b) => (b.date ?? b.plannedDate ?? '').localeCompare(a.date ?? a.plannedDate ?? ''))
+      .slice(0, 30).map((s) => ({
+        id: s.id, title: s.title, goalId: s.goalId, metricId: s.metricId, status: s.status,
+        plannedDate: s.plannedDate, plannedMinutes: s.plannedMinutes, date: s.date, actualMinutes: s.actualMinutes,
+        taskIds: s.taskIds, recurrence: s.recurrence, allocations: s.allocations.slice(0, 20),
+        notes: s.notes.slice(0, 400),
+      })),
     taskCounts: {
       open: live.filter(isOpen).length,
       inbox: live.filter((t) => isOpen(t) && !t.plannedDate).length,

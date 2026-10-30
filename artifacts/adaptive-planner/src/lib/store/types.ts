@@ -3,6 +3,7 @@ export type GoalStatus = 'active' | 'paused' | 'completed' | 'cancelled';
 export type Priority = 'high' | 'medium' | 'low';
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type MetricKind = 'outcome' | 'leading';
+export type { WorkSession } from '@workspace/api-zod';
 
 export interface Strategy {
   summary: string;
@@ -30,6 +31,8 @@ export interface MetricEntry {
     taskTitle?: string;
     milestoneId?: string;
     milestoneTitle?: string;
+    sessionId?: string;
+    sessionTitle?: string;
   };
 }
 
@@ -185,6 +188,7 @@ export interface AppState {
   settings: Settings;
   goals: Goal[];
   tasks: Task[];
+  sessions?: import('@workspace/api-zod').WorkSession[];
   weekPlans: Record<string, WeekPlan>;
   periodNotes: Record<string, string>;
   reviews: Review[];

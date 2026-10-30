@@ -111,7 +111,10 @@ function CompletionForm({ task, goal, onClose }: { task: Task; goal: Goal; onClo
   const today = todayIso();
   const hasMetrics = goal.metrics.length > 0;
   const [metricId, setMetricId] = useState(primaryMetric(goal)?.id ?? '');
-  const [mode, setMode] = useState<Mode>(hasMetrics ? 'change' : 'none');
+  const [mode, setMode] = useState<Mode>(() => {
+    const m = primaryMetric(goal);
+    return !hasMetrics || m?.entries.some((e) => e.source?.sessionId && e.source.taskId === task.id) ? 'none' : 'change';
+  });
   const [change, setChange] = useState('');
   const [total, setTotal] = useState('');
   const [date, setDate] = useState(today);
@@ -259,6 +262,11 @@ function CompletionForm({ task, goal, onClose }: { task: Task; goal: Goal; onClo
             </p>
           ) : (
             <>
+              {priorCredits.some(({ e }) => e.source?.sessionId) && (
+                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="text-session-already-credited">
+                  Time for this task has already been recorded in a work session. Finish without an additional change to keep it counted once. Only add a result here for genuinely additional work or a different outcome.
+                </p>
+              )}
               {goal.metrics.length > 1 && (
                 <Field label="Measure">
                   <Select value={metricId} onValueChange={(v) => { setMetricId(v); setChange(''); setTotal(''); }} disabled={frozen || mode === 'none'}>
@@ -297,7 +305,7 @@ function CompletionForm({ task, goal, onClose }: { task: Task; goal: Goal; onClo
                       {formatDelta(e.value, m.unit)} {goal.metrics.length > 1 ? m.name : ''} ({relDay(e.date).toLowerCase()})
                     </span>
                   ))}
-                  . Enter only the additional result from this session.
+                  . Enter only an additional result that has not already been recorded.
                 </div>
               )}
 

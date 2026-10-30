@@ -24,6 +24,8 @@ import { finalizeWeek, rescheduleTasks, reopenWeek, setPeriodNote, setWeekPlan }
 import { dueReminders, effortLabel, inboxTasks, overdueTasks, plannedOn, tasksInRange, weekRange } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import { cn } from '@/lib/utils';
+import { plannedWorkMinutes } from '@workspace/api-zod';
+import { WorkSessionsPanel } from '@/components/work-sessions';
 import { AskButton } from '@/components/ai/ask-button';
 
 type View = 'year' | 'quarter' | 'month' | 'week' | 'today';
@@ -364,7 +366,8 @@ function InboxPicker({ days, defaultDay }: { days: string[]; defaultDay: string 
 
 /* ---------- Week ---------- */
 function DayBlock({ day, today, onDrill }: { day: string; today: string; onDrill: (v: View, d: string) => void }) {
-  const { tasks } = useAppState();
+  const state = useAppState();
+  const { tasks } = state;
   const list = plannedOn(tasks, day);
   const open = list.filter((t) => t.status === 'open');
   const done = list.filter((t) => t.status === 'done');
@@ -373,7 +376,8 @@ function DayBlock({ day, today, onDrill }: { day: string; today: string; onDrill
   const [adding, setAdding] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [expandPast, setExpandPast] = useState(false);
-  const dayEffort = open.reduce((a, t) => a + t.effort, 0);
+  const dayEffort = plannedWorkMinutes(state, day, day);
+  const daySessions = (state.sessions ?? []).filter((x) => x.plannedDate === day).length;
   const collapsedPast = past && !expandPast;
   return (
     <section
@@ -389,7 +393,7 @@ function DayBlock({ day, today, onDrill }: { day: string; today: string; onDrill
           {isToday && <span className="text-xs font-medium">Today</span>}
         </button>
         <span className="ml-auto font-num text-xs text-muted-foreground">
-          {list.length === 0 ? '' : `${open.length} open${done.length ? ` · ${done.length} done` : ''}${dayEffort ? ` · ${effortLabel(dayEffort)}` : ''}`}
+          {list.length === 0 && !daySessions ? '' : `${open.length} open${done.length ? ` · ${done.length} done` : ''}${daySessions ? ` · ${daySessions} session${daySessions > 1 ? 's' : ''}` : ''}${dayEffort ? ` · ${effortLabel(dayEffort)}` : ''}`}
         </span>
         {past && list.length > 0 && (
           <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" onClick={() => setExpandPast((v) => !v)} aria-expanded={expandPast} data-testid={`button-expand-${day}`}>
@@ -423,7 +427,7 @@ function WeekView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d: s
   const days = weekRange(ws);
   const plan = state.weekPlans[ws] ?? { weekStart: ws, focus: '', capacityMinutes: 600, finalized: false, commitments: [] };
   const weekTasks = tasksInRange(state.tasks, ws, days[6]);
-  const effort = weekTasks.reduce((a, t) => a + t.effort, 0);
+  const effort = plannedWorkMinutes(state, ws, days[6]);
   const over = effort > plan.capacityMinutes;
   const [focus, setFocus] = useState(plan.focus);
   useEffect(() => setFocus(plan.focus), [ws, plan.focus]);
@@ -526,6 +530,7 @@ function WeekView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d: s
       </div>
       <div className="min-w-0 xl:col-span-4">
         <div className="space-y-5 xl:sticky xl:top-6">
+          <WorkSessionsPanel start={ws} end={days[6]} defaultDate={days.includes(today) ? today : days[0]} title="Sessions this week" />
           <InboxPicker days={days} defaultDay={days.includes(today) ? today : days[0]} />
         </div>
       </div>
@@ -535,12 +540,13 @@ function WeekView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d: s
 
 /* ---------- Day ---------- */
 function DayView({ day }: { day: string }) {
-  const { tasks } = useAppState();
+  const state = useAppState();
+  const { tasks } = state;
   const today = todayIso();
   const list = plannedOn(tasks, day);
   const overdue = day === today ? overdueTasks(tasks).filter((t) => t.plannedDate !== day) : [];
   const reminders = day === today ? dueReminders(tasks, nowStamp()) : [];
-  const effort = list.reduce((a, t) => a + t.effort, 0);
+  const effort = plannedWorkMinutes(state, day, day);
   const ws = weekStartIso(day);
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12">
@@ -568,7 +574,8 @@ function DayView({ day }: { day: string }) {
           </div>
         )}
       </div>
-      <div className="xl:col-span-4">
+      <div className="space-y-5 xl:col-span-4">
+        <WorkSessionsPanel start={day} end={day} defaultDate={day} title="Sessions this day" />
         <InboxPicker days={weekRange(ws).filter((d) => d >= today || d === day)} defaultDay={day} />
       </div>
     </div>

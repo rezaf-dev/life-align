@@ -44,7 +44,7 @@ function sourceLabel(e: MetricEntry) {
   const s = e.source;
   if (!s) return 'Unattributed';
   if (s.taskTitle && s.milestoneTitle) return `${s.taskTitle} · ${s.milestoneTitle}`;
-  return s.taskTitle ?? s.milestoneTitle ?? 'Unattributed';
+  return s.taskTitle ?? s.milestoneTitle ?? s.sessionTitle ?? 'Unattributed';
 }
 
 /* ---------- Record / edit dialog ---------- */
@@ -272,6 +272,10 @@ export function MetricAttribution({ goal, metric, at }: { goal: Goal; metric: Me
   const taskIds = [...new Set(contribs.map((e) => e.source?.taskId).filter(Boolean) as string[])];
   const msIds = [...new Set(contribs.flatMap((e) => [e.source?.milestoneId]).filter(Boolean) as string[])];
   const rows = [
+    ...[...new Set(contribs.map((e) => e.source?.sessionId).filter(Boolean) as string[])].map((id) => ({
+      key: `s-${id}`, kind: 'Session', name: contribs.find((e) => e.source?.sessionId === id)?.source?.sessionTitle ?? 'Work session',
+      amt: contribs.filter((e) => e.source?.sessionId === id).reduce((sum, e) => sum + e.value, 0),
+    })),
     ...msIds.map((id) => ({ key: `m-${id}`, kind: 'Milestone', name: goal.milestones.find((m) => m.id === id)?.title ?? contribs.find((e) => e.source?.milestoneId === id)?.source?.milestoneTitle ?? 'Removed milestone', amt: contributionAmount(metric, { milestoneId: id }, at) })),
     ...taskIds.map((id) => ({ key: `t-${id}`, kind: 'Task', name: tasks.find((t) => t.id === id)?.title ?? contribs.find((e) => e.source?.taskId === id)?.source?.taskTitle ?? 'Removed task', amt: contributionAmount(metric, { taskId: id }, at) })),
   ];
@@ -295,7 +299,7 @@ export function MetricAttribution({ goal, metric, at }: { goal: Goal; metric: Me
         ))}
       </ul>
       <p className="mt-2 text-[0.7rem] leading-snug text-muted-foreground">
-        Credited by you after the fact, not proof of cause. A task's milestone total includes it, so rows overlap; the total counts each entry once.
+        Credited by you after the fact, not proof of cause. Sessions include their task allocations, and milestones include their tasks, so rows overlap; the total counts each entry once.
       </p>
     </div>
   );
@@ -323,20 +327,21 @@ export function MetricEntryRow({ goal, metric, entry, onEdit }: { goal: Goal; me
             {contrib ? formatDelta(entry.value, metric.unit) : formatValue(entry.value, metric.unit)}
           </span>
           <span className={cn('rounded px-1 text-[0.65rem]', contrib ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
-            {contrib ? 'change' : 'reading'}
+            {entry.source?.sessionId ? 'session time' : contrib ? 'change' : 'reading'}
           </span>
         </div>
         {contrib && <div className="truncate text-muted-foreground">{sourceLabel(entry)}</div>}
         {entry.note && <div className="truncate text-muted-foreground italic">{entry.note}</div>}
+        {entry.source?.sessionId && <div className="text-muted-foreground">Edit duration or allocations in Work sessions.</div>}
       </div>
-      {contrib && (
+      {contrib && !entry.source?.sessionId && (
         <button type="button" onClick={onEdit} className="grid size-9 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit contribution from ${fmt(entry.date, 'MMM d')}`} data-testid={`button-edit-entry-${entry.id}`}>
           <Pencil className="size-3.5" />
         </button>
       )}
-      <button type="button" onClick={() => setConfirm(true)} className="grid size-9 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete entry from ${fmt(entry.date, 'MMM d')}`} data-testid={`button-delete-entry-${entry.id}`}>
+      {!entry.source?.sessionId && <button type="button" onClick={() => setConfirm(true)} className="grid size-9 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete entry from ${fmt(entry.date, 'MMM d')}`} data-testid={`button-delete-entry-${entry.id}`}>
         <X className="size-3.5" />
-      </button>
+      </button>}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -363,11 +368,11 @@ export function ContributionChips({ goal, filter, testId }: { goal?: Goal; filte
   const list = summaries(goal, filter);
   if (!list.length) return null;
   return (
-    <span className="inline-flex flex-wrap gap-x-2" data-testid={testId}>
+    <span className="inline-flex min-w-0 max-w-full flex-wrap gap-x-2" data-testid={testId}>
       {list.map(({ m, amt }) => {
         const share = formatShare(m, amt);
         return (
-          <span key={m.id} className={cn('inline-flex items-center gap-1 font-num', favorable(m, amt) ? 'text-primary' : 'text-destructive')}>
+          <span key={m.id} className={cn('inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 break-words font-num', favorable(m, amt) ? 'text-primary' : 'text-destructive')}>
             <TrendingUp className="size-3" />
             {formatDelta(amt, m.unit)} {m.name.toLowerCase()}
             {share && <span className="text-muted-foreground">({share})</span>}

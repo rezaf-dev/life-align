@@ -65,6 +65,7 @@ import { useAppState } from '@/lib/store/store';
 import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
+import { SessionEntryRow, WorkSessionsPanel } from '@/components/work-sessions';
 
 type DialogKind =
   | null
@@ -231,6 +232,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
         <TabsList className="mb-4 flex h-auto w-full max-w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-auto">
           {[
             { v: 'actions', l: 'Actions', n: open.length },
+            { v: 'sessions', l: 'Sessions', n: (state.sessions ?? []).filter((x) => x.goalId === goal.id && x.status === 'planned').length },
             { v: 'milestones', l: 'Milestones', n: goal.milestones.filter((m) => !m.done).length },
             { v: 'results', l: 'Results', n: goal.metrics.length },
             { v: 'history', l: 'History', n: goal.history.length },
@@ -260,6 +262,10 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="sessions" className="mt-0">
+          <WorkSessionsPanel goalId={goal.id} defaultDate={today} title="Work sessions" />
         </TabsContent>
 
         <TabsContent value="milestones" className="mt-0">
@@ -552,7 +558,7 @@ function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete
         <ul className="mt-2 grid min-w-0 grid-cols-1 gap-0.5 rounded-lg bg-muted/50 p-2 [&>li]:min-w-0" data-testid={`list-entries-${metric.id}`}>
           {entries.length === 0 && <li className="px-1 text-xs text-muted-foreground">{recurring ? `Nothing logged in this period. It counts as ${formatValue(0, metric.unit)}.` : `Nothing logged yet. Baseline ${formatValue(metric.baseline, metric.unit)}.`}</li>}
           {entries.map(({ entry }) => (
-            <MetricEntryRow key={entry.id} goal={goal} metric={metric} entry={entry} onEdit={() => onRecord(entry.id)} />
+            entry.source?.sessionId ? <SessionEntryRow key={entry.id} metric={metric} entry={entry} /> : <MetricEntryRow key={entry.id} goal={goal} metric={metric} entry={entry} onEdit={() => onRecord(entry.id)} />
           ))}
         </ul>
       )}

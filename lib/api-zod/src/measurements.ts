@@ -5,6 +5,8 @@ export interface MeasurementSource {
   taskTitle?: string;
   milestoneId?: string;
   milestoneTitle?: string;
+  sessionId?: string;
+  sessionTitle?: string;
 }
 export interface MeasurementEvent {
   id: string;
@@ -121,14 +123,16 @@ export const measurementEntrySchema = z.object({
   source: z.object({
     taskId: z.string().min(1).optional(), taskTitle: z.string().optional(),
     milestoneId: z.string().min(1).optional(), milestoneTitle: z.string().optional(),
+    sessionId: z.string().min(1).optional(), sessionTitle: z.string().optional(),
   }).optional(),
 }).passthrough().superRefine((entry, ctx) => {
   if (entry.mode !== 'contribution') return;
   if (!isMeasurementDate(entry.date)) ctx.addIssue({ code: 'custom', path: ['date'], message: 'Enter a real measurement date.' });
   if (entry.value === 0) ctx.addIssue({ code: 'custom', path: ['value'], message: 'A contribution must record a non-zero change.' });
-  if (!entry.source?.taskId && !entry.source?.milestoneId) {
-    ctx.addIssue({ code: 'custom', path: ['source'], message: 'A contribution must identify its task or milestone.' });
+  if (!entry.source?.taskId && !entry.source?.milestoneId && !entry.source?.sessionId) {
+    ctx.addIssue({ code: 'custom', path: ['source'], message: 'A contribution must identify its task, milestone or work session.' });
   }
+  if (entry.source?.sessionId && !entry.source.sessionTitle?.trim()) ctx.addIssue({ code: 'custom', path: ['source', 'sessionTitle'], message: 'Keep the work session title.' });
   if (entry.source?.taskId && !entry.source.taskTitle?.trim()) {
     ctx.addIssue({ code: 'custom', path: ['source', 'taskTitle'], message: 'Keep a snapshot of the contributing task title.' });
   }
