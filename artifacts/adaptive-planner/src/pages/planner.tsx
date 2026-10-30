@@ -27,8 +27,12 @@ import { cn } from '@/lib/utils';
 import { plannedWorkMinutes } from '@workspace/api-zod';
 import { WorkSessionsPanel } from '@/components/work-sessions';
 import { AskButton } from '@/components/ai/ask-button';
+import { useAccess } from '@/components/auth/access-provider';
+import { DayAgenda } from '@/components/day-agenda';
+import { dayAgenda } from '@/lib/day-agenda';
+import { readPlannerView, rememberPlannerView, resolvePlannerView, type PlannerView } from '@/lib/planner-views';
 
-type View = 'year' | 'quarter' | 'month' | 'week' | 'today';
+type View = PlannerView;
 const VIEWS: { value: View; label: string }[] = [
   { value: 'week', label: 'Week' },
   { value: 'today', label: 'Day' },
@@ -47,18 +51,22 @@ const quarterKey = (d: string) => `${d.slice(0, 4)}-Q${Math.floor((Number(d.slic
 export default function PlannerPage() {
   const search = useSearch();
   const [, navigate] = useLocation();
-  const initial = (new URLSearchParams(search).get('view') as View) || 'week';
-  const [view, setView] = useState<View>(VIEWS.some((v) => v.value === initial) ? initial : 'week');
+  const { member } = useAccess();
+  const [view, setView] = useState<View>(() => resolvePlannerView(search, readPlannerView(member?.id)));
   const [anchor, setAnchor] = useState(todayIso());
 
   useEffect(() => {
-    const v = new URLSearchParams(search).get('view') as View | null;
-    if (v && VIEWS.some((x) => x.value === v)) setView(v);
-  }, [search]);
+    const next = resolvePlannerView(search, readPlannerView(member?.id));
+    setView(next);
+    rememberPlannerView(member?.id, next);
+  }, [search, member?.id]);
 
   const changeView = (v: View) => {
     setView(v);
-    navigate(`/planner?view=${v}`, { replace: true });
+    rememberPlannerView(member?.id, v);
+    const params = new URLSearchParams(search);
+    params.set('view', v);
+    navigate(`/planner?${params.toString()}`, { replace: true });
   };
 
   const step = (dir: 1 | -1) => {
@@ -543,29 +551,22 @@ function DayView({ day }: { day: string }) {
   const state = useAppState();
   const { tasks } = state;
   const today = todayIso();
-  const list = plannedOn(tasks, day);
-  const overdue = day === today ? overdueTasks(tasks).filter((t) => t.plannedDate !== day) : [];
+  const agenda = dayAgenda(state, day);
+  const overdue = day === today ? overdueTasks(tasks).filter((t) => !agenda.remainingTasks.some((item) => item.id === t.id)) : [];
   const reminders = day === today ? dueReminders(tasks, nowStamp()) : [];
-  const effort = plannedWorkMinutes(state, day, day);
   const ws = weekStartIso(day);
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12">
       <div className="min-w-0 space-y-6 xl:col-span-8">
-        <div className="surface rise p-5 md:p-6">
-          <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="font-display text-2xl">{fmt(day, 'EEEE, MMMM d')}</h2>
-            <span className="font-num text-xs text-muted-foreground">{effortLabel(effort) || '0m'} planned</span>
-          </div>
-          <QuickAdd defaults={{ plannedDate: day }} placeholder={`Add to ${relDay(day).toLowerCase()}`} testId="input-day-quick-add" />
-          <div className="mt-4 divide-y divide-border/60">
-            {list.length === 0 ? <EmptyState title="Nothing planned" body="Pull from the inbox on the right." /> : list.map((t) => <TaskRow key={t.id} task={t} siblings={list} hideDate />)}
-          </div>
-        </div>
+        <section className="surface rise min-w-0 p-3 sm:p-5" aria-labelledby="day-plan-heading">
+          <h2 id="day-plan-heading" className="mb-3 font-display text-xl">{fmt(day, 'EEEE, MMMM d')}</h2>
+          <DayAgenda key={day} day={day} />
+        </section>
         {overdue.length > 0 && (
-          <div className="surface rise p-5">
-            <div className="mb-2 text-sm font-medium text-destructive">Carried over</div>
-            <div className="divide-y divide-border/60">{overdue.map((t) => <TaskRow key={t.id} task={t} siblings={overdue} />)}</div>
-          </div>
+          <details className="surface rise p-5">
+            <summary className="cursor-pointer text-sm font-medium text-destructive">Carried over · {overdue.length}</summary>
+            <div className="mt-2 divide-y divide-border/60">{overdue.map((t) => <TaskRow key={t.id} task={t} siblings={overdue} />)}</div>
+          </details>
         )}
         {reminders.length > 0 && (
           <div className="surface rise p-5">
@@ -575,7 +576,6 @@ function DayView({ day }: { day: string }) {
         )}
       </div>
       <div className="space-y-5 xl:col-span-4">
-        <WorkSessionsPanel start={day} end={day} defaultDate={day} title="Sessions this day" />
         <InboxPicker days={weekRange(ws).filter((d) => d >= today || d === day)} defaultDay={day} />
       </div>
     </div>

@@ -1,11 +1,11 @@
 import { measurementTargetAt, plannedWorkMinutes } from '@workspace/api-zod';
-import { WorkSessionsPanel } from '@/components/work-sessions';
+import { DayAgenda } from '@/components/day-agenda';
+import { dayAgenda } from '@/lib/day-agenda';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ArrowRight, Bell, Check, ChevronDown, Flag, Info, LineChart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { QuickAdd } from '@/components/quick-add';
 import { TaskRow } from '@/components/task-row';
 import { useTaskCompletion } from '@/components/task-completion';
 import { LogMetricDialog } from '@/components/goal-dialogs';
@@ -20,7 +20,6 @@ import {
   goalHealth,
   metricValueAt,
   overdueTasks,
-  plannedOn,
   tasksInRange,
 } from '@/lib/store/selectors';
 import { isRecurring } from '@/components/measurement-period';
@@ -88,11 +87,8 @@ export default function OverviewPage() {
   const [logGoal, setLogGoal] = useState<Goal | null>(null);
 
   const data = useMemo(() => {
-    const p = { high: 0, medium: 1, low: 2 };
-    const todays = plannedOn(state.tasks, today);
-    const openToday = todays.filter((t) => t.status === 'open').sort((a, b) => p[a.priority] - p[b.priority]);
-    const doneToday = todays.filter((t) => t.status === 'done');
-    const overdue = overdueTasks(state.tasks, today).filter((t) => t.plannedDate !== today);
+    const remainingIds = new Set(dayAgenda(state, today).remainingTasks.map((t) => t.id));
+    const overdue = overdueTasks(state.tasks, today).filter((t) => !remainingIds.has(t.id));
     const reminders = dueReminders(state.tasks, nowStamp());
     const active = state.goals.filter((g) => g.status === 'active');
     const weekTasks = tasksInRange(state.tasks, ws, addDaysIso(ws, 6));
@@ -104,7 +100,7 @@ export default function OverviewPage() {
       .slice(0, 4);
     const insights = generateInsights(state, today).slice(0, 4);
     const lastWeekly = state.reviews.find((r) => r.type === 'weekly');
-    return { openToday, doneToday, overdue, reminders, active, weekTasks, plan, effort, milestones, insights, lastWeekly };
+    return { overdue, reminders, active, weekTasks, plan, effort, milestones, insights, lastWeekly };
   }, [state, today, ws]);
 
   const weekDone = data.weekTasks.filter((t) => t.status === 'done').length;
@@ -120,8 +116,6 @@ export default function OverviewPage() {
       : null;
 
   const summary = [
-    data.openToday.length ? `${data.openToday.length} open today` : 'Nothing open today',
-    data.doneToday.length ? `${data.doneToday.length} done` : null,
     data.overdue.length ? `${data.overdue.length} carried over` : null,
   ]
     .filter(Boolean)
@@ -155,12 +149,10 @@ export default function OverviewPage() {
         <section className="surface rise min-w-0 p-3 sm:p-5 lg:col-span-7" aria-labelledby="today-h">
           <div className="mb-3 flex items-baseline justify-between gap-3 px-1">
             <h2 id="today-h" className="font-display text-xl">Today</h2>
-            <span className="text-xs text-muted-foreground" data-testid="text-today-progress">{summary}</span>
+            <span className="text-xs text-muted-foreground" data-testid="text-today-progress">{summary || null}</span>
           </div>
-          <QuickAdd defaults={{ plannedDate: today }} placeholder="Add to today" />
-
           {data.reminders.length > 0 && (
-            <ul className="mt-3 rounded-lg border border-primary/20 bg-accent/40 px-1 py-0.5" role="status" aria-label="Reminders due">
+            <ul className="mb-3 rounded-lg border border-primary/20 bg-accent/40 px-1 py-0.5" role="status" aria-label="Reminders due">
               {data.reminders.map((t) => (
                 <li key={t.id} className="flex items-center gap-1 py-0.5" data-testid={`reminder-${t.id}`}>
                   <Bell className="ml-2 size-3.5 shrink-0 text-accent-foreground" aria-hidden />
@@ -184,22 +176,7 @@ export default function OverviewPage() {
             </ul>
           )}
 
-          <div className="mt-2">
-            {data.openToday.length === 0 ? (
-              <EmptyState
-                className="py-6"
-                title={data.doneToday.length ? 'Today is done' : 'A clear day'}
-                body={data.doneToday.length ? 'Everything planned for today is complete.' : 'Capture above, or pull something from the inbox in the planner.'}
-                action={<Button variant="outline" size="sm" asChild><Link href="/planner?view=today">Open day plan</Link></Button>}
-              />
-            ) : (
-              <div className="divide-y divide-border/60">
-                {data.openToday.map((t) => <TaskRow key={t.id} task={t} siblings={data.openToday} hideDate />)}
-              </div>
-            )}
-          </div>
-
-          {state.goals.length > 0 && <WorkSessionsPanel start={today} end={today} defaultDate={today} title="Today's work sessions" />}
+          <DayAgenda day={today} />
 
           {data.overdue.length > 0 && (
             <Disclosure
@@ -231,13 +208,7 @@ export default function OverviewPage() {
             </Disclosure>
           )}
 
-          {data.doneToday.length > 0 && (
-            <Disclosure label="Completed today" count={data.doneToday.length} testId="button-toggle-done-today">
-              {data.doneToday.map((t) => <TaskRow key={t.id} task={t} siblings={data.doneToday} />)}
-            </Disclosure>
-          )}
-
-          <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-border px-1 pt-4 text-sm">
+          <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-border px-1 pt-4 text-sm">
             <div className="col-span-3 sm:col-span-1">
               <dt className="text-xs text-muted-foreground">Week focus</dt>
               <dd className="leading-snug" data-testid="text-week-focus">
