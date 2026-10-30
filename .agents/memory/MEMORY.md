@@ -1,2 +1,3 @@
 - [AI approval boundaries](ai-approval-boundaries.md) — why model proposals and local planning persistence stay separate.
 - [Responsive expanded states](responsive-expanded-states.md) — verify mobile width with histories expanded, not just the initial page.
+- [Time tracking expectations](time-tracking-expectations.md) — hourly work needs optional timers alongside manual time entry and correction.

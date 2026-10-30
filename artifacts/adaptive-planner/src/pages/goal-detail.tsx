@@ -66,6 +66,7 @@ import type { Goal, GoalStatus, Metric, MetricKind } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
 import { SessionEntryRow, WorkSessionsPanel } from '@/components/work-sessions';
+import { GoalReports } from '@/components/goal-reports';
 
 type DialogKind =
   | null
@@ -109,6 +110,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [activeTab, setActiveTab] = useState('actions');
   const [showDone, setShowDone] = useState(false);
   const today = todayIso();
   const close = () => setDialog(null);
@@ -228,7 +230,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
         </div>
       </div>
 
-      <Tabs defaultValue="actions" className="rise">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="rise">
         <TabsList className="mb-4 flex h-auto w-full max-w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 sm:w-auto">
           {[
             { v: 'actions', l: 'Actions', n: open.length },
@@ -236,9 +238,10 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
             { v: 'milestones', l: 'Milestones', n: goal.milestones.filter((m) => !m.done).length },
             { v: 'results', l: 'Results', n: goal.metrics.length },
             { v: 'history', l: 'History', n: goal.history.length },
+            { v: 'reports', l: 'Reports', n: null },
           ].map((t) => (
             <TabsTrigger key={t.v} value={t.v} className="min-h-9 gap-1 rounded-lg px-2 text-xs data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none sm:gap-1.5 sm:px-3 sm:text-sm" data-testid={`tab-goal-${t.v}`}>
-              {t.l} <span className="font-num text-xs opacity-70">{t.n}</span>
+              {t.l} {t.n !== null && <span className="font-num text-xs opacity-70">{t.n}</span>}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -335,6 +338,10 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
               </div>
             )}
           </Section>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-0">
+          <GoalReports goal={goal} onViewActions={() => setActiveTab('actions')} />
         </TabsContent>
 
         <TabsContent value="history" className="mt-0">

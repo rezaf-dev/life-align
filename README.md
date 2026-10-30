@@ -20,6 +20,7 @@ It keeps an important distinction clear: **doing the work and achieving the resu
 - **Flexible measurements** — track cumulative results, weekly targets, or monthly targets, such as **30 project hours per month**.
 - **Period history** — browse earlier weeks and months without losing their measurements or targets.
 - **Weekly and monthly reviews** — reflect on progress using snapshots of your recorded work and results.
+- **Goal reports and client timesheets** — inspect progress over a date range, see current next steps, and optionally print a measure-specific timesheet or download its CSV.
 - **AI-assisted planning** — discuss goals, review progress, and approve proposed changes before they are applied.
 - **Private workspaces** — each approved account has its own planning data, with server-side access checks.
 - **Administrator-approved signup** — new users wait for approval before accessing the planner.
@@ -52,6 +53,12 @@ Use **Log time** afterward, or **Log work** for something you did without a plan
 Correcting or deleting logged time updates its original contribution rather than adding another. Finish an already-attributed task without recording the same hours again; its completion dialog reminds you when session time has already been recorded.
 
 To replace an existing “work for one hour” task with a time reservation, choose **Convert to work session** from its task menu. Conversion is explicit: the original task is archived and its past results are preserved. Sessions without a compatible time measure remain time-only. No timer is required.
+
+### Goal reports and client timesheets
+
+Open a goal's **Reports** tab to see measured changes, period totals and targets, completed tasks and milestones, and current work that needs attention. Date filters affect recorded activity; current next steps are labelled separately. Weekly and monthly results stay separated across their calendar resets.
+
+Expand **Client timesheet** when you need to share work with a client. Select a specific hours/minutes measure and date range, then use **Print or save PDF** or **Download CSV**. Sessions appear as task allocations plus any general-work remainder, counted once. Direct time contributions and signed corrections are included; estimates, planned sessions, time-only sessions, and absolute observations are excluded. Private notes are excluded unless you opt in. Nothing is sent automatically.
 
 ## Technology
 

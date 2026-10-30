@@ -53,6 +53,8 @@ Five primary destinations: Overview, Goals, Planner, Tasks & Inbox, and Reviews.
 
 Keep setup optional and task capture title-only. Use progressive disclosure. Default to polished light mode and support dark mode and smaller screens. Avoid unnecessary infrastructure, gamification, excessive notifications, and decorative analytics. The UX target is a simple, fast, sophisticated, enjoyable everyday personal tool—not an enterprise project management system.
 
+Goal reports are primarily for understanding progress, completed work, remaining work, and what needs attention—not just timesheets. Client timesheets are optional, scoped to a specific hours/minutes measure and inclusive date range. Export actual work once, never reservations, estimates, or absolute measurement checkpoints. Keep private notes out of client documents unless explicitly included.
+
 ## Gotchas
 
 _Populate as you build — sharp edges, "always run X before Y" rules._
