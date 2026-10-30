@@ -1,4 +1,4 @@
-import { isMeasurementDate, measurementBaseline, measurementPeriod, measurementTargetAt, measurementValueAt, timeUnitMinutes } from '@workspace/api-zod';
+import { isMeasurementDate, measurementBaseline, measurementPeriod, measurementTargetAt, measurementValueAt, timeUnitMinutes, sessionWorkDone } from '@workspace/api-zod';
 import { addDaysIso, daysBetween, todayIso } from './dates';
 import type { AppState, Goal, Milestone, Task } from './store/types';
 
@@ -21,6 +21,8 @@ export interface GoalReport {
 export interface TimesheetRow {
   id: string; date: string; description: string; sessionTitle?: string; milestone?: string;
   minutes: number; notes?: string; kind: 'session' | 'contribution' | 'adjustment';
+  workDone?: string[];
+  sessionId?: string;
 }
 export interface Timesheet {
   goalId: string; goalTitle: string; metricId: string; metricName: string; unit: string;
@@ -103,16 +105,20 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
     s.goalId === goal.id && s.metricId === metric.id && s.status === 'logged' && within(s.date, start, end));
   const rows: TimesheetRow[] = [];
   for (const session of sessions) {
+    const firstRow = rows.length;
     for (const allocation of session.allocations) rows.push({
       id: `${session.id}:${allocation.taskId}`, date: session.date!, description: allocation.taskTitle || 'Recorded task work',
       sessionTitle: session.title, milestone: allocation.milestoneTitle, minutes: allocation.minutes,
-      notes: session.notes, kind: 'session',
+      notes: session.notes, kind: 'session', sessionId: session.id,
     });
     const remainder = (session.actualMinutes ?? 0) - sum(session.allocations, (a) => a.minutes);
     if (remainder > 1e-8) rows.push({
       id: `${session.id}:general`, date: session.date!, description: session.allocations.length ? `${session.title} — general work` : session.title,
-      sessionTitle: session.title, minutes: remainder, notes: session.notes, kind: 'session',
+      sessionTitle: session.title, minutes: remainder, notes: session.notes, kind: 'session', sessionId: session.id,
     });
+    // Timed task names are already the row descriptions; only append genuinely additional details.
+    const additional = sessionWorkDone(session).additional;
+    if (rows[firstRow] && additional.length) rows[firstRow].workDone = additional;
   }
   let excludedCheckpoints = 0;
   for (const entry of metric.entries) {

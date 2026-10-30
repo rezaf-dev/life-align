@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Section } from '@/components/primitives';
 import { TimesheetPanel } from '@/components/goal-timesheet';
+import { SavedTimesheets } from '@/components/saved-timesheets';
 import { addDaysIso, fmt, monthStartIso, relDay, todayIso } from '@/lib/dates';
 import { formatValue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
@@ -85,6 +86,7 @@ export function GoalReports({ goal, onViewActions }: { goal: Goal; onViewActions
           <TimesheetPanel goal={goal} start={start} end={end} />
         </>
       )}
+      <SavedTimesheets goal={goal} />
     </div>
   );
 }

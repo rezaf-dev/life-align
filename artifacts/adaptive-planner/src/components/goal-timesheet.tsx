@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, FileDown, Printer } from 'lucide-react';
+import { ChevronDown, FileDown, Printer, Save } from 'lucide-react';
+import { SaveTimesheetDialog } from '@/components/saved-timesheets';
 import { timeUnitMinutes } from '@workspace/api-zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
   const [client, setClient] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   const [includeNotes, setIncludeNotes] = useState(false);
+  const [saving, setSaving] = useState(false);
   const activeId = timeMetrics.some((m) => m.id === metricId) ? metricId : timeMetrics[0]?.id ?? '';
   const sheet = useMemo(() => (activeId ? buildTimesheet(state, goal, activeId, start, end) : null), [state, goal, activeId, start, end]);
 
@@ -54,7 +56,7 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
       </div>
       <label className="mb-4 flex min-h-9 items-center gap-2 text-sm">
         <Checkbox checked={includeNotes} onCheckedChange={(v) => setIncludeNotes(v === true)} data-testid="checkbox-timesheet-notes" />
-        Include work notes <span className="text-xs text-muted-foreground">session and direct-entry notes may be private</span>
+        Include private notes <span className="text-xs text-muted-foreground">internal, off by default. Work done items are always included.</span>
       </label>
 
       {empty ? (
@@ -76,6 +78,12 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
                         {[r.kind === 'adjustment' ? 'Correction' : r.kind === 'contribution' ? 'Direct entry' : null, r.sessionTitle !== r.description ? r.sessionTitle : null, r.milestone].filter(Boolean).join(' · ')}
                       </div>
                     ) : null}
+                    {r.workDone && r.workDone.length > 0 && (
+                      <div className="mt-1" data-testid={`list-timesheet-workdone-${r.id}`}>
+                        <div className="text-xs text-muted-foreground">Work done this session</div>
+                        <ul className="ml-4 list-disc text-xs leading-relaxed">{r.workDone.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                      </div>
+                    )}
                     {includeNotes && r.notes && <div className="mt-0.5 text-xs italic text-muted-foreground">{r.notes}</div>}
                   </td>
                   <td className={cn('whitespace-nowrap px-3 py-2 text-right font-num', r.minutes < 0 && 'text-destructive')}>{formatMinutes(r.minutes)}</td>
@@ -94,7 +102,9 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
       <div className="mt-4 flex flex-wrap gap-2">
         <Button disabled={empty} onClick={() => { if (sheet && !printTimesheet(sheet, opts)) toast({ title: 'Print window was blocked', description: 'Allow pop-ups for this site and try again.' }); }} data-testid="button-timesheet-print"><Printer /> Print or save PDF</Button>
         <Button variant="outline" disabled={empty} onClick={() => sheet && downloadTimesheetCsv(sheet, opts)} data-testid="button-timesheet-csv"><FileDown /> Download CSV</Button>
+        <Button variant="secondary" disabled={empty} onClick={() => setSaving(true)} data-testid="button-timesheet-save"><Save /> Save timesheet</Button>
       </div>
+      {sheet && !empty && <SaveTimesheetDialog open={saving} onOpenChange={setSaving} goal={goal} sheet={sheet} client={client.trim()} preparedBy={preparedBy.trim()} includeNotes={includeNotes} />}
     </Disclosure>
   );
 }

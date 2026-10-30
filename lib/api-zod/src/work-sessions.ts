@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { isMeasurementDate, type MeasurementEvent } from './measurements';
 
 const date = z.string().refine(isMeasurementDate, 'Choose a real date.');
+export const workDoneListSchema = z.array(z.string().max(2000)).max(200)
+  .transform((items) => items.map((item) => item.trim()).filter(Boolean));
 export const workSessionSchema = z.object({
   id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string().min(1),
   metricId: z.string().optional(), plannedDate: date.optional(),
@@ -9,6 +11,7 @@ export const workSessionSchema = z.object({
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   taskIds: z.array(z.string()).max(100),
   notes: z.string(), status: z.enum(['planned', 'logged']),
+  workDone: workDoneListSchema.optional(),
   date: date.optional(), actualMinutes: z.number().finite().positive().max(1500).optional(),
   allocations: z.array(z.object({
     taskId: z.string().min(1), taskTitle: z.string(), milestoneId: z.string().optional(),
@@ -24,6 +27,25 @@ export const workSessionSchema = z.object({
   if (new Set(s.allocations.map((a) => a.taskId)).size !== s.allocations.length) ctx.addIssue({ code: 'custom', message: 'Allocate time to each task once per session.' });
 });
 export type WorkSession = z.infer<typeof workSessionSchema>;
+
+/** Allocations already retain the task title. Derive descriptions, never extra time or completion. */
+export function sessionWorkDone(session: {
+  allocations?: readonly { taskTitle: string; minutes: number }[];
+  workDone?: readonly string[];
+}): { tasks: string[]; additional: string[]; all: string[] } {
+  const seen = new Set<string>();
+  const unique = (items: readonly string[]) => items.map((item) => item.trim()).filter((item) => {
+    const key = item.replace(/\s+/g, ' ').toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  const tasks = unique((session.allocations ?? [])
+    .filter((row) => Number.isFinite(row.minutes) && row.minutes > 0)
+    .map((row) => row.taskTitle || 'Recorded task work'));
+  const additional = unique(session.workDone ?? []);
+  return { tasks, additional, all: [...tasks, ...additional] };
+}
+
 export function timeUnitMinutes(unit: string): number | null {
   const normalized = unit.trim().toLowerCase();
   if (/^(h|hr|hrs|hour|hours)$/.test(normalized)) return 60;

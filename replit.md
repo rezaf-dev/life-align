@@ -59,7 +59,11 @@ Time tracking supports hourly client work, but timers must remain optional along
 
 Tasks & Inbox includes work sessions alongside tasks: unscheduled reservations in Inbox, dated reservations in Today/Upcoming/Overdue, all reservations in All open, and logged work in Completed. Today uses the actual work date for logged sessions, never their old reservation date. Search and goal filters apply to both. Remember the selected view as an account-scoped browser preference, with explicit URL views taking priority; UI navigation preferences must not create workspace-save conflicts.
 
+Work done is client-facing accomplishment detail, not a new task type or a second source of recorded time. Keep live timer items in the private account workspace with honest saving/error/retry feedback; blank rows are allowed while typing. Preserve their work dates when finishing, retain items outside timed dates on the final reviewed date, and protect stale review/discard actions against newer details. Logged entries keep their own editable lists; recurring reservations must not inherit past accomplishments. Include work done once per session in timesheets, CSV, and printable documents even when task allocations create several rows. Private notes remain separate and excluded from client documents unless explicitly included.
+
 ## Gotchas
+
+- Saved timesheets are independent snapshots in the private workspace, with editable rows and metadata, a separate internal report note, and manual paid/unpaid bookkeeping. Report edits never modify source time logs or goal measurements. Every update/payment/delete uses the report revision to reject stale dialogs; retry persistence without repeating the mutation. Exports must use the explicit client projection and never include report notes or payment metadata, even when session notes are opted in. Keep monetary totals separate by currency. Goals and sample data containing saved financial history cannot be removed until their reports are explicitly deleted.
 
 _Populate as you build — sharp edges, "always run X before Y" rules._
 

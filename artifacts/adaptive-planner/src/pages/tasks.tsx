@@ -167,9 +167,10 @@ export default function TasksPage() {
           <WorkSessionsPanel
             goalId={goalFilter === 'all' ? undefined : goalFilter}
             filter={sessionFilter}
-            title={view === 'done' ? 'Logged sessions' : 'Work sessions'}
+            title={view === 'inbox' ? 'Unscheduled sessions' : view === 'done' ? 'Logged sessions' : 'Work sessions'}
             defaultDate={view === 'today' ? today : undefined}
           />
+          {view === 'inbox' && <p className="mt-2 px-1 text-xs text-muted-foreground">Logged work appears in Today and Completed, not Inbox.</p>}
         </div>
       )}
     </div>

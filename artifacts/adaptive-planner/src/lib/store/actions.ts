@@ -277,6 +277,7 @@ export function setGoalStatus(id: string, status: GoalStatus, reason: string, so
 
 export function deleteGoal(id: string) {
   update((d) => {
+    if (d.savedTimesheets?.some((report) => report.goalId === id)) throw new Error('This goal has saved timesheets and payment history. Keep the goal to retain them, or delete its saved timesheets explicitly first.');
     if (d.activeTimer?.goalId === id) throw new Error('Finish or discard this goal’s timer before deleting the goal.');
     d.goals = d.goals.filter((g) => g.id !== id);
     if (d.sessions) d.sessions = d.sessions.filter((s) => s.goalId !== id);
@@ -639,6 +640,7 @@ export function restoreSample() {
 export function removeSampleData() {
   update((d) => {
     const demoGoals = new Set(d.goals.filter((g) => g.isDemo).map((g) => g.id));
+    if (d.savedTimesheets?.some((report) => demoGoals.has(report.goalId))) throw new Error('Sample goals contain saved timesheets and payment history. Remove those reports explicitly before removing the sample data.');
     d.goals = d.goals.filter((g) => !g.isDemo);
     if (d.sessions) d.sessions = d.sessions.filter((s) => !demoGoals.has(s.goalId));
     d.tasks = d.tasks.filter((t) => !t.isDemo);

@@ -42,6 +42,8 @@ test('session search and goal selection match the task filters without leaking o
   assert.equal(sessionMatchesTaskFilters(item, 'goal-b', 'Email'), false);
   assert.equal(sessionMatchesTaskFilters(item, 'none', ''), false);
   assert.equal(sessionMatchesTaskFilters(item, 'all', 'not present'), false);
+  assert.equal(sessionMatchesTaskFilters({ ...item, workDone: ['Verified delivery'] }, 'all', 'DELIVERY'), true);
+  assert.equal(sessionMatchesTaskFilters({ ...item, workDone: ['Verified delivery'] }, 'goal-b', 'delivery'), false);
 });
 
 test('explicit URL views take priority over preferences and malformed values safely fall back', () => {

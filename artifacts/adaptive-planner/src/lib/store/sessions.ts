@@ -6,9 +6,11 @@ import type { AppState, MetricEntry, Recurrence } from './types';
 export interface SessionDraft {
   title: string; goalId: string; metricId?: string; plannedDate?: string;
   plannedMinutes: number; recurrence: Recurrence; taskIds: string[]; notes: string;
+  workDone?: string[];
 }
 export interface SessionResult {
   date: string; actualMinutes: number; allocations: { taskId: string; minutes: number }[]; notes?: string;
+  workDone?: string[];
   newTasks?: { key: string; title: string; minutes: number }[];
   recurrenceAfter?: string;
   allowedThroughDate?: string;
@@ -26,7 +28,7 @@ export function validateDraft(state: AppState, input: SessionDraft) {
 export function buildSession(input: SessionDraft): WorkSession {
   return workSessionSchema.parse({ title: input.title.trim(), goalId: input.goalId, metricId: input.metricId || undefined,
     plannedDate: input.plannedDate || undefined, plannedMinutes: input.plannedMinutes, recurrence: input.recurrence,
-    taskIds: input.taskIds, notes: input.notes, id: uid(), createdAt: nowStamp(), status: 'planned', allocations: [] });
+    taskIds: input.taskIds, notes: input.notes, workDone: input.workDone, id: uid(), createdAt: nowStamp(), status: 'planned', allocations: [] });
 }
 export function saveWorkSession(input: SessionDraft, id?: string): string {
   let result = id ?? '';
@@ -107,7 +109,8 @@ export function logWorkSessionInDraft(state: AppState, id: string, input: Sessio
     });
     const wasLogged = session.status === 'logged';
     Object.assign(session, workSessionSchema.parse({ ...session, date: input.date, actualMinutes: input.actualMinutes,
-      allocations, notes: input.notes ?? session.notes, status: 'logged', loggedAt: session.loggedAt ?? nowStamp() }));
+      allocations, notes: input.notes ?? session.notes, workDone: input.workDone ?? session.workDone,
+      status: 'logged', loggedAt: session.loggedAt ?? nowStamp() }));
     syncCredits(state, session);
     if (!wasLogged && session.recurrence !== 'none' && !session.spawnedNextId) {
       const base = session.plannedDate ?? input.date;
@@ -121,7 +124,7 @@ export function logWorkSessionInDraft(state: AppState, id: string, input: Sessio
         const interval = session.recurrence === 'weekly' ? 7 : 1;
         nextDate = addDaysIso(base, Math.max(1, Math.floor(daysBetween(base, afterDate) / interval) + 1) * interval);
       }
-      const next = buildSession({ ...session, plannedDate: nextDate });
+      const next = buildSession({ ...session, plannedDate: nextDate, workDone: undefined });
       // A session reserves time; specific task assignments don't automatically recur.
       next.taskIds = [];
       state.sessions!.push(next);

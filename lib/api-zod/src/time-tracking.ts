@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isMeasurementDate } from './measurements';
 
 export const activeWorkTimerSchema = z.object({
   id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string().min(1),
@@ -7,7 +8,14 @@ export const activeWorkTimerSchema = z.object({
   status: z.enum(['running', 'paused']),
   segments: z.array(z.object({ start: z.string().datetime(), end: z.string().datetime().optional() })).min(1).max(2000),
   createdAt: z.string(),
+  workDone: z.array(z.object({
+    id: z.string().min(1), text: z.string().max(2000),
+    date: z.string().refine(isMeasurementDate, 'Choose a real work date.'),
+  })).max(200).optional(),
 }).superRefine((timer, ctx) => {
+  if (new Set(timer.workDone?.map((item) => item.id)).size !== (timer.workDone?.length ?? 0)) {
+    ctx.addIssue({ code: 'custom', message: 'Each work item needs its own identity.' });
+  }
   let lastEnd = -Infinity;
   timer.segments.forEach((s, index) => {
     const start = Date.parse(s.start), end = s.end ? Date.parse(s.end) : Infinity;
@@ -19,6 +27,18 @@ export const activeWorkTimerSchema = z.object({
   if (timer.status === 'running' && timer.segments.at(-1)?.end) ctx.addIssue({ code: 'custom', message: 'A running timer needs an open interval.' });
 });
 export type ActiveWorkTimer = z.infer<typeof activeWorkTimerSchema>;
+/** Keep every work item exactly once, including items added on paused/non-timed dates. */
+export function timerWorkDoneForDays(timer: ActiveWorkTimer, dates: string[]): string[][] {
+  const result: string[][] = dates.map(() => []);
+  if (!dates.length) return result;
+  for (const item of timer.workDone ?? []) {
+    const text = item.text.trim();
+    if (!text) continue;
+    const index = dates.indexOf(item.date);
+    result[index < 0 ? dates.length - 1 : index].push(text);
+  }
+  return result;
+}
 export function timerElapsedSeconds(timer: ActiveWorkTimer, nowMs = Date.now()): number {
   return Math.max(0, Math.floor(timer.segments.reduce((sum, s) => sum + Math.max(0, (s.end ? Date.parse(s.end) : nowMs) - Date.parse(s.start)), 0) / 1000));
 }

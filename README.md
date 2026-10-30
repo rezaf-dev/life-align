@@ -12,11 +12,14 @@ It keeps an important distinction clear: **doing the work and achieving the resu
 
 ## Features
 
+- **Saved client timesheets** — keep editable historical reports with internal-only notes, optional amounts and currencies, paid/unpaid status, and payment dates. Export client-safe CSV or printable documents without changing the original work logs.
+
 - **Goals and milestones** — define outcomes, organize supporting work, and adapt your strategy.
 - **Weekly planning** — make realistic commitments based on your available capacity.
 - **Tasks and subtasks** — organize work, link it to goals and milestones, and schedule recurring tasks.
 - **Work sessions** — reserve project time, log actual durations, and split time across tasks or unplanned work without counting it twice.
 - **Optional work timer** — start, pause, resume, and review actual time before saving. Manual time entry and full corrections remain available.
+- **Work done details** — capture accomplishments while a timer runs, or add/edit them on a time entry. Live items autosave to your private account and appear once on client timesheets, separately from private notes.
 - **Measured contributions** — record actual results against tasks or milestones and see how much they contributed to a goal.
 - **Flexible measurements** — track cumulative results, weekly targets, or monthly targets, such as **30 project hours per month**.
 - **Period history** — browse earlier weeks and months without losing their measurements or targets.

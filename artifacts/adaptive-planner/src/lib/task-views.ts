@@ -1,4 +1,5 @@
 import type { WorkSession } from './store/types';
+import { sessionWorkDone } from '@workspace/api-zod';
 
 export const TASK_VIEW_KEYS = ['inbox', 'today', 'upcoming', 'overdue', 'open', 'done', 'archived'] as const;
 export type TaskView = typeof TASK_VIEW_KEYS[number];
@@ -37,5 +38,6 @@ export function sessionMatchesTaskView(session: WorkSession, view: TaskView, tod
 export function sessionMatchesTaskFilters(session: WorkSession, goalFilter: string, query: string): boolean {
   const search = query.trim().toLowerCase();
   return (goalFilter === 'all' || session.goalId === goalFilter) &&
-    (!search || session.title.toLowerCase().includes(search) || session.notes.toLowerCase().includes(search));
+    (!search || session.title.toLowerCase().includes(search) || session.notes.toLowerCase().includes(search) ||
+      sessionWorkDone(session).all.some((item) => item.toLowerCase().includes(search)));
 }

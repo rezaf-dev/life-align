@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Clock3, Hourglass, Pencil, Play, Plus, Repeat, Timer, Trash2, X } from 'lucide-react';
-import { manualTimeDays, timeUnitMinutes } from '@workspace/api-zod';
+import { manualTimeDays, timeUnitMinutes, sessionWorkDone } from '@workspace/api-zod';
+import { WorkDoneField, WorkDonePreview, cleanWorkDone } from '@/components/work-done-editor';
 import { DurationInput } from '@/components/duration-input';
 import { formatMinutes } from '@/lib/reports';
 import { useWorkSessionActions } from '@/components/work-session-provider';
@@ -200,6 +201,8 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
     ? session.allocations.map((a) => ({ key: a.taskId, taskId: a.taskId, seconds: Math.round(a.minutes * 60) }))
     : (session?.taskIds ?? []).map((id) => ({ key: id, taskId: id, seconds: 0 })));
   const [newTitle, setNewTitle] = useState('');
+  const [single, setSingle] = useState<string[]>(() => session?.workDone ?? []);
+  const [byDate, setByDate] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState(false);
   const [staged, setStaged] = useState(false);
   const [error, setError] = useState('');
@@ -219,6 +222,17 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
     catch (e) { return { days: [] as { date: string; seconds: number }[], err: e instanceof Error ? e.message : 'Check the start and end.' }; }
   }, [mode, startAt, endAt, zone]);
 
+  // Range mode: each item belongs to one date. Items from outside the range (or from duration mode) sit on the last day.
+  const rangeDates = range.days.map((d) => d.date);
+  const lastDate = rangeDates[rangeDates.length - 1];
+  const orphanList = [...single, ...Object.keys(byDate).sort().filter((d) => !rangeDates.includes(d)).flatMap((d) => byDate[d])];
+  const dayLists: Record<string, string[]> = Object.fromEntries(rangeDates.map((d) => [d, [...(byDate[d] ?? []), ...(d === lastDate ? orphanList : [])]]));
+  const editDay = (date: string, v: string[]) => { setByDate({ ...dayLists, [date]: v }); setSingle([]); };
+  const switchMode = (m: 'duration' | 'range') => {
+    if (m === mode) return;
+    if (m === 'duration') { setSingle([...Object.keys(byDate).sort().flatMap((d) => byDate[d]), ...single]); setByDate({}); }
+    setMode(m);
+  };
   const total = mode === 'range' ? range.days.reduce((a, d) => a + d.seconds, 0) : seconds;
   const allocated = rows.reduce((s, r) => s + r.seconds, 0);
   const remainder = seconds - allocated;
@@ -235,13 +249,13 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
       if (!logged.current) {
         const allocations = rows.filter((r) => !r.newTitle).map((r) => ({ taskId: r.taskId!, minutes: r.seconds / 60 }));
         if (isCorrection) {
-          editLoggedWorkSession(session.id, { title: title.trim(), goalId: gid, metricId: metricOut, date: day, actualMinutes: seconds / 60, allocations, notes });
+          editLoggedWorkSession(session.id, { title: title.trim(), goalId: gid, metricId: metricOut, date: day, actualMinutes: seconds / 60, allocations, notes, workDone: cleanWorkDone(single) });
         } else if (isNew && mode === 'range') {
           const link = linkTask !== NONE && goalTasks.some((t) => t.id === linkTask) ? linkTask : undefined;
           recordManualWork({ title: title.trim(), goalId: gid, metricId: metricOut, plannedMinutes: 0, recurrence: 'none', taskIds: [], notes },
-            range.days.map((d) => ({ date: d.date, actualMinutes: d.seconds / 60, allocations: link ? [{ taskId: link, minutes: d.seconds / 60 }] : [] })));
+            range.days.map((d) => ({ date: d.date, actualMinutes: d.seconds / 60, workDone: cleanWorkDone(dayLists[d.date]), allocations: link ? [{ taskId: link, minutes: d.seconds / 60 }] : [] })));
         } else {
-          const result = { date: day, actualMinutes: seconds / 60, notes, allocations,
+          const result = { date: day, actualMinutes: seconds / 60, notes, allocations, workDone: cleanWorkDone(single),
             newTasks: rows.filter((r) => r.newTitle).map((r) => ({ key: r.key, title: r.newTitle!, minutes: r.seconds / 60 })) };
           if (sessionId.current) logWorkSession(sessionId.current, result);
           else sessionId.current = recordUnplannedSession({ title: title.trim(), goalId: gid, metricId: metricOut, plannedMinutes: 0, recurrence: 'none', taskIds: [], notes }, result);
@@ -272,7 +286,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
       {isNew && (
         <div className="inline-flex rounded-lg border border-border p-0.5 text-xs" role="tablist" aria-label="How to enter time">
           {(['duration', 'range'] as const).map((m) => (
-            <button key={m} type="button" role="tab" aria-selected={mode === m} disabled={frozen} onClick={() => setMode(m)}
+            <button key={m} type="button" role="tab" aria-selected={mode === m} disabled={frozen} onClick={() => switchMode(m)}
               className={cn('rounded-md px-3 py-1.5', mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')} data-testid={`tab-time-${m}`}>
               {m === 'duration' ? 'Duration' : 'Start and end'}
             </button>
@@ -356,7 +370,21 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
           {rows.some((r) => r.newTitle) && <p className="text-xs text-muted-foreground">New tasks are captured open and unscheduled on this goal. Mark them done yourself if they are finished.</p>}
         </div>
       )}
-      <Field label="Notes" htmlFor="log-notes">
+      {mode === 'range' && rangeDates.length > 0 ? (
+        <div className="space-y-3 rounded-lg border border-border/80 p-3" data-testid="list-range-workdone">
+          {rangeDates.map((d, i) => (
+            <WorkDoneField key={d} value={dayLists[d]} onChange={(v) => editDay(d, v)} disabled={frozen} testId={`range-${i}`}
+              automaticItems={linkTask !== NONE ? [goalTasks.find((task) => task.id === linkTask)?.title ?? ''] : []}
+              label={rangeDates.length > 1 ? `Work done on ${fmt(d, 'EEE MMM d')}` : 'Work done'} hint={i === 0 ? undefined : null}
+              note={d === lastDate && cleanWorkDone(orphanList).length > 0 ? `${cleanWorkDone(orphanList).length} item(s) from outside this range are placed on this last day. Move or remove them as needed.` : undefined} />
+          ))}
+        </div>
+      ) : (
+        <WorkDoneField value={single} onChange={setSingle} disabled={frozen} testId="log"
+          automaticItems={rows.filter((row) => row.seconds > 0).map((row) => row.newTitle ?? goalTasks.find((task) => task.id === row.taskId)?.title ?? session?.allocations.find((a) => a.taskId === row.taskId)?.taskTitle ?? '')}
+          note={mode === 'range' ? 'Choose a start and end to place these items on work dates.' : undefined} />
+      )}
+      <Field label="Private notes" htmlFor="log-notes" hint="Internal. Not on client timesheets unless you choose to include notes.">
         <Textarea id="log-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={frozen} data-testid="input-log-notes" />
       </Field>
       {goal && <EffectNote goal={goal} metricId={editable ? metricId : session?.metricId ?? NONE} minutes={total / 60} testId="text-log-effect" />}
@@ -508,6 +536,7 @@ export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Wo
                     )}
                     <span>{metric ? `to ${metric.name}` : 'time only'}</span>
                   </div>
+                  {s.status === 'logged' && <WorkDonePreview items={sessionWorkDone(s).all} testId={s.id} />}
                 </div>
                 <div className="flex shrink-0 items-center">
                   {s.status === 'planned' ? (
@@ -517,7 +546,7 @@ export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Wo
                       <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Edit ${s.title}`} onClick={() => setDialog({ plan: s })} data-testid={`button-edit-session-${s.id}`}><Pencil /></Button>
                     </>
                   ) : (
-                    <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Correct time for ${s.title}`} onClick={() => setDialog({ log: s })} data-testid={`button-edit-log-${s.id}`}><Pencil /></Button>
+                    <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Correct time and work details for ${s.title}`} onClick={() => setDialog({ log: s })} data-testid={`button-edit-log-${s.id}`}><Pencil /></Button>
                   )}
                   <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Delete ${s.title}`} onClick={() => setDialog({ del: s })} data-testid={`button-delete-session-${s.id}`}><Trash2 /></Button>
                 </div>

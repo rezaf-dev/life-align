@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { savedTimesheetSchema } from '@workspace/api-zod';
 import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart, workSessionSchema, sessionLedgerIssues, activeWorkTimerSchema, timeUnitMinutes } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
@@ -54,6 +55,7 @@ export const stateSchema = z.object({
   goals: z.array(goal).max(5000), tasks: z.array(task).max(30000),
   sessions: z.array(workSessionSchema).max(30000).optional(),
   activeTimer: activeWorkTimerSchema.optional(),
+  savedTimesheets: z.array(savedTimesheetSchema).max(1000).optional(),
   weekPlans: z.record(text, z.object({
     weekStart: text, focus: text, capacityMinutes: z.number(), finalized: z.boolean(),
     finalizedAt: text.optional(), commitments: z.array(commitment),
@@ -76,6 +78,11 @@ export const stateSchema = z.object({
   aiApplied: z.array(text).optional(),
   aiHistory: z.array(z.object({ at: text, summary: text })).optional(),
 }).passthrough().superRefine((state, ctx) => {
+  const reports = state.savedTimesheets ?? [];
+  if (new Set(reports.map((report) => report.id)).size !== reports.length ||
+    reports.some((report) => !state.goals.some((goal) => goal.id === report.goalId))) {
+    ctx.addIssue({ code: 'custom', path: ['savedTimesheets'], message: 'Saved timesheets need unique identities and an existing goal. Remove reports explicitly before deleting their goal.' });
+  }
   for (const message of sessionLedgerIssues(state)) ctx.addIssue({ code: 'custom', path: ['sessions'], message });
   if (state.activeTimer) {
     const goal = state.goals.find((g) => g.id === state.activeTimer!.goalId);

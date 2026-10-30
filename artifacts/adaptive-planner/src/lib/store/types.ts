@@ -5,6 +5,7 @@ export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type MetricKind = 'outcome' | 'leading';
 export type { WorkSession } from '@workspace/api-zod';
 export type { ActiveWorkTimer } from '@workspace/api-zod';
+export type { SavedTimesheet } from '@workspace/api-zod';
 
 export interface Strategy {
   summary: string;
@@ -185,6 +186,7 @@ export interface Settings {
 }
 
 export interface AppState {
+  savedTimesheets?: import('@workspace/api-zod').SavedTimesheet[];
   version: 1;
   settings: Settings;
   goals: Goal[];

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, Pause, Play, RotateCcw, Square, Trash2, X } from 'lucide-react';
-import { formatElapsed, splitTimerDays, timeTrackingDate, timerElapsedSeconds, type ActiveWorkTimer } from '@workspace/api-zod';
+import { AlertTriangle, Check, ChevronDown, ListChecks, Pause, Play, RotateCcw, Square, Trash2, X } from 'lucide-react';
+import { formatElapsed, splitTimerDays, timeTrackingDate, timerElapsedSeconds, timerWorkDoneForDays, type ActiveWorkTimer } from '@workspace/api-zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Field, FormDialog } from '@/components/form-dialog';
 import { AreaDot } from '@/components/primitives';
+import { LiveWorkDoneEditor, WorkDoneField, cleanWorkDone } from '@/components/work-done-editor';
 import { DurationInput } from '@/components/duration-input';
 import { EffectNote, GoalSelect, MeasureSelect, NONE, timeMetrics } from '@/components/work-sessions';
 import { useToast } from '@/hooks/use-toast';
@@ -64,7 +65,9 @@ export function TimerBar({ onFinish, onDiscard, finishError, finishPending }: { 
   const timer = state.activeTimer;
   const elapsed = useElapsed(timer);
   const action = useStagedAction();
+  const [showWork, setShowWork] = useState(false);
   if (!timer) return null;
+  const workCount = (timer.workDone ?? []).filter((w) => w.text.trim()).length;
   const goal = state.goals.find((g) => g.id === timer.goalId);
   const running = timer.status === 'running';
   const toggle = () => void action.run(() => (running ? pauseWorkTimer() : resumeWorkTimer()), () => undefined);
@@ -77,11 +80,15 @@ export function TimerBar({ onFinish, onDiscard, finishError, finishPending }: { 
           <div className="truncate text-sm" data-testid="text-timer-title">{timer.title}</div>
           <div className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
             {goal && <><AreaDot area={goal.area} /> <span className="truncate">{goal.title}</span> · </>}
-            <span data-testid="status-timer">{running ? 'Running, keeps counting in the background until paused' : 'Paused'}</span>
+            <span className="shrink-0" title={running ? 'Keeps counting in the background until paused' : undefined} data-testid="status-timer">{running ? 'Running' : 'Paused'}</span>
           </div>
         </div>
         {elapsed >= LONG_SECONDS && <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" data-testid="text-timer-long"><AlertTriangle className="size-3.5" /> Over 8h, check before saving</span>}
         <div className="flex shrink-0 items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-9 px-2" aria-expanded={showWork} aria-controls="timer-workdone" onClick={() => setShowWork((v) => !v)} data-testid="button-timer-workdone">
+            <ListChecks /> <span className="hidden sm:inline">Work done</span>{workCount > 0 && <span className="font-num rounded bg-primary/12 px-1 text-xs text-primary" data-testid="text-timer-workdone-count">{workCount}</span>}
+            <ChevronDown className={cn('size-3.5 transition-transform', showWork && 'rotate-180')} />
+          </Button>
           {action.staged ? (
             <Button size="sm" variant="outline" className="h-9" disabled={action.pending} onClick={() => void action.run(() => undefined, () => undefined)} data-testid="button-timer-retry">
               <RotateCcw /> {action.pending ? 'Saving…' : 'Retry save'}
@@ -95,6 +102,11 @@ export function TimerBar({ onFinish, onDiscard, finishError, finishPending }: { 
           <Button size="icon" variant="ghost" className="size-9 text-muted-foreground" disabled={action.frozen} aria-label="Discard timer" onClick={onDiscard} data-testid="button-timer-discard"><Trash2 /></Button>
         </div>
       </div>
+      {showWork && (
+        <div id="timer-workdone" className="mx-auto mt-2 max-h-[50dvh] max-w-6xl overflow-y-auto rounded-lg border border-border/80 bg-card p-3" data-testid="disclosure-timer-workdone">
+          <LiveWorkDoneEditor compact />
+        </div>
+      )}
       {action.pending && !action.staged && <p className="mx-auto max-w-6xl text-xs text-muted-foreground" data-testid="text-timer-saving">Waiting for your account to save…</p>}
       {action.error && <p role="alert" className="mx-auto max-w-6xl text-xs text-destructive" data-testid="text-timer-error">{action.error}</p>}
       {finishError && <p role="alert" className="mx-auto max-w-6xl text-xs text-destructive" data-testid="text-timer-finish-error">{finishError}</p>}
@@ -168,8 +180,13 @@ export function DiscardTimerDialog({ onClose }: { onClose: () => void }) {
   return (
     <FormDialog open onOpenChange={(o) => { if (!o && !action.pending) onClose(); }} title="Discard this timer?"
       submitLabel={action.pending ? 'Discarding…' : action.staged ? 'Retry saving' : 'Discard timer'} canSubmit={!action.pending && !!timer}
-      onSubmit={() => void action.run(() => discardWorkTimer(), () => { toast({ title: 'Timer discarded', description: 'No time was recorded.' }); onClose(); })}>
+      onSubmit={() => void action.run(() => discardWorkTimer(timer?.id, timer?.workDone ?? []), () => { toast({ title: 'Timer discarded', description: 'No time was recorded.' }); onClose(); })}>
       <p className="text-sm text-muted-foreground" data-testid="text-discard-timer">"{timer?.title}" ({formatElapsed(elapsed)}) will be thrown away. No time or measure credit is recorded.</p>
+      {cleanWorkDone(timer?.workDone?.map((w) => w.text)).length > 0 && (
+        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" data-testid="warning-discard-workdone">
+          Its {cleanWorkDone(timer?.workDone?.map((w) => w.text)).length} work done item(s) are removed too. To keep them, close this and use Finish to save the time instead.
+        </p>
+      )}
       {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
     </FormDialog>
   );
@@ -177,7 +194,7 @@ export function DiscardTimerDialog({ onClose }: { onClose: () => void }) {
 
 /* ---------- Finish review ---------- */
 type Alloc = { key: string; taskId: string; seconds: number };
-type DayRow = { key: string; date: string; seconds: number; allocs: Alloc[]; open: boolean };
+type DayRow = { key: string; date: string; seconds: number; allocs: Alloc[]; open: boolean; workDone: string[] };
 
 export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const state = useAppState();
@@ -192,7 +209,10 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const fallback = !!init.err;
   const [rows, setRows] = useState<DayRow[]>(() => {
     const base = fallback ? [{ date: maxDate, seconds: 0 }] : init.days;
-    return base.map((d, i) => ({ key: `d${i}`, date: d.date, seconds: d.seconds, open: false,
+    let lists: string[][] = [];
+    try { lists = timer ? timerWorkDoneForDays(timer, base.map((d) => d.date)) : []; }
+    catch { lists = base.map((_, i) => (i === base.length - 1 ? cleanWorkDone(timer?.workDone?.map((w) => w.text)) : [])); }
+    return base.map((d, i) => ({ key: `d${i}`, date: d.date, seconds: d.seconds, open: false, workDone: lists[i] ?? [],
       allocs: timer?.taskId ? [{ key: 'a0', taskId: timer.taskId, seconds: d.seconds }] : [] }));
   });
   const [gid, setGid] = useState(timer?.goalId ?? '');
@@ -221,16 +241,21 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   }
 
   const save = () => void action.run(() => {
+    const kept = rows.filter((r) => r.seconds > 0);
+    // Items on zero-time days are never dropped: they move to the last saved day.
+    const orphans = rows.filter((r) => r.seconds <= 0).flatMap((r) => cleanWorkDone(r.workDone));
     saveWorkTimer(timer.id, {
+      workDoneSnapshot: timer.workDone ?? [],
       title: title.trim(), goalId: gid, metricId: metricId === NONE ? undefined : metricId, notes,
-      days: rows.filter((r) => r.seconds > 0).map((r) => ({ date: r.date, actualMinutes: r.seconds / 60,
+      days: kept.map((r, i) => ({ date: r.date, actualMinutes: r.seconds / 60,
+        workDone: cleanWorkDone(i === kept.length - 1 ? [...r.workDone, ...orphans] : r.workDone),
         allocations: r.allocs.filter((a) => tasks.some((t) => t.id === a.taskId)).map((a) => ({ taskId: a.taskId, minutes: a.seconds / 60 })) })),
     });
   }, () => { toast({ title: 'Time recorded', description: `${formatMinutes(total / 60)} saved${rows.length > 1 ? ` across ${rows.length} days` : ''}.` }); onClose(); });
 
   return (
     <FormDialog open wide onOpenChange={(o) => { if (!o && !action.pending) onClose(); }} title="Review timed work"
-      description="The timer is paused. Adjust anything before saving. Closing keeps it paused so you can resume later."
+      description="The timer is paused. Adjust anything before saving. Closing keeps it paused with its saved work items; edits here apply only when you save."
       submitLabel={action.pending ? 'Saving…' : action.staged ? 'Retry saving' : 'Save time'} canSubmit={!action.pending && (action.staged || valid)} onSubmit={save}>
       {fallback && (
         <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" data-testid="text-finish-split-error">
@@ -285,6 +310,12 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
                     <p className={cn('font-num text-xs', free < 0 ? 'text-destructive' : 'text-muted-foreground')}>{free < 0 ? `${formatElapsed(-free)} more than the day` : `${formatElapsed(free)} stays general goal time`}</p>
                   </div>
                 )}
+                <div className="border-t border-border/60 pt-2">
+                  <WorkDoneField value={r.workDone} onChange={(v) => patch(r.key, (x) => ({ ...x, workDone: v }))} disabled={action.frozen}
+                    automaticItems={r.allocs.filter((a) => a.seconds > 0).map((a) => taskTitle(a.taskId))}
+                    testId={`finish-${i}`} label={rows.length > 1 ? `Work done on ${fmt(r.date || maxDate, 'MMM d')}` : 'Work done'} hint={i === 0 ? undefined : null}
+                    note={r.seconds <= 0 && cleanWorkDone(r.workDone).length > 0 ? 'This day has no time, so its items are saved on the last day with time.' : undefined} />
+                </div>
                 {r.seconds > MAX_DAY_SECONDS && <p className="text-xs text-destructive">One day can hold at most 25 hours.</p>}
                 {r.allocs.some((a) => a.seconds <= 0) && <p className="text-xs text-destructive">Give each task some time or remove it.</p>}
               </li>
@@ -293,7 +324,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
         </ul>
         <p className="text-xs text-muted-foreground">Allocating never completes a task. Dates use the timer's time zone ({timer.timezone}).</p>
       </div>
-      <Field label="Notes" htmlFor="finish-notes">
+      <Field label="Private notes" htmlFor="finish-notes" hint="Internal. Not on client timesheets unless you choose to include notes.">
         <Textarea id="finish-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={action.frozen} data-testid="input-finish-notes" />
       </Field>
       {long && (
