@@ -57,6 +57,8 @@ Goal reports are primarily for understanding progress, completed work, remaining
 
 Time tracking supports hourly client work, but timers must remain optional alongside manual addition and full correction. A timer is an uncredited draft until reviewed and saved. Preserve elapsed seconds without hidden billing rounding, exclude paused intervals, and split work across local-calendar midnight/month boundaries in its captured time zone. Keep a single active timer per account, protect saves with workspace revision checks, and never treat task completion as permission to add duplicate time. Forgotten long timers need explicit review, not automatic idle deductions.
 
+Tasks & Inbox includes work sessions alongside tasks: unscheduled reservations in Inbox, dated reservations in Today/Upcoming/Overdue, all reservations in All open, and logged work in Completed. Today uses the actual work date for logged sessions, never their old reservation date. Search and goal filters apply to both. Remember the selected view as an account-scoped browser preference, with explicit URL views taking priority; UI navigation preferences must not create workspace-save conflicts.
+
 ## Gotchas
 
 _Populate as you build — sharp edges, "always run X before Y" rules._

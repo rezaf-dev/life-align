@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QuickAdd } from '@/components/quick-add';
 import { TaskRow } from '@/components/task-row';
+import { WorkSessionsPanel } from '@/components/work-sessions';
+import { useAccess } from '@/components/auth/access-provider';
 import { EmptyState, PageHeader } from '@/components/primitives';
 import { Chip } from '@/pages/goals';
 import { addDaysIso, fmt, relDay, todayIso } from '@/lib/dates';
@@ -12,8 +14,9 @@ import { isOpen, isOverdue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import type { Task } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { readTaskView, rememberTaskView, resolveTaskView, sessionMatchesTaskFilters, sessionMatchesTaskView, type TaskView } from '@/lib/task-views';
 
-type ViewKey = 'inbox' | 'today' | 'upcoming' | 'overdue' | 'open' | 'done' | 'archived';
+type ViewKey = TaskView;
 const VIEWS: { key: ViewKey; label: string; empty: [string, string] }[] = [
   { key: 'inbox', label: 'Inbox', empty: ['Inbox is clear', 'Everything captured has a date or a home.'] },
   { key: 'today', label: 'Today', empty: ['Nothing for today', 'Capture above or pull from the inbox.'] },
@@ -31,16 +34,17 @@ export default function TasksPage() {
   const state = useAppState();
   const search = useSearch();
   const [, navigate] = useLocation();
-  const initial = (new URLSearchParams(search).get('view') as ViewKey) || 'inbox';
-  const [view, setView] = useState<ViewKey>(VIEWS.some((v) => v.key === initial) ? initial : 'inbox');
+  const { member } = useAccess();
+  const [view, setView] = useState<ViewKey>(() => resolveTaskView(search, readTaskView(member?.id)));
   const [goalFilter, setGoalFilter] = useState('all');
   const [q, setQ] = useState('');
   const today = todayIso();
 
   useEffect(() => {
-    const v = new URLSearchParams(search).get('view') as ViewKey | null;
-    if (v && VIEWS.some((x) => x.key === v)) setView(v);
-  }, [search]);
+    const next = resolveTaskView(search, readTaskView(member?.id));
+    setView(next);
+    rememberTaskView(member?.id, next);
+  }, [search, member?.id]);
 
   const match = (t: Task, v: ViewKey) => {
     switch (v) {
@@ -54,7 +58,12 @@ export default function TasksPage() {
     }
   };
 
-  const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.key, state.tasks.filter((t) => match(t, v.key)).length])), [state.tasks, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.key,
+    state.tasks.filter((t) => match(t, v.key)).length + (state.sessions ?? []).filter((s) => sessionMatchesTaskView(s, v.key, today)).length,
+  ])), [state.tasks, state.sessions, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sessionFilter = (session: NonNullable<typeof state.sessions>[number]) =>
+    sessionMatchesTaskView(session, view, today) && sessionMatchesTaskFilters(session, goalFilter, q);
+  const sessionCount = (state.sessions ?? []).filter(sessionFilter).length;
 
   const list = useMemo(() => {
     const ql = q.trim().toLowerCase();
@@ -83,17 +92,23 @@ export default function TasksPage() {
     return [...map.entries()].map(([label, items]) => ({ label, items }));
   }, [list, view, today]);
 
-  const choose = (k: ViewKey) => { setView(k); navigate(`/tasks?view=${k}`, { replace: true }); };
+  const choose = (k: ViewKey) => {
+    setView(k);
+    rememberTaskView(member?.id, k);
+    const params = new URLSearchParams(search);
+    params.set('view', k);
+    navigate(`/tasks?${params.toString()}`, { replace: true });
+  };
   const secondaryActive = SECONDARY.some((v) => v.key === view);
   const meta = VIEWS.find((v) => v.key === view)!;
 
   return (
     <div>
-      <PageHeader title="Tasks & Inbox" description="Capture with just a title. Decide where it goes later." />
+      <PageHeader title="Tasks & Inbox" description="Tasks and work sessions, together. Capture now, plan when you're ready." />
       <QuickAdd className="rise mb-4 py-2" placeholder="Capture a task, press Enter" testId="input-tasks-quick-add" />
 
       <div className="rise mb-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Task views">
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Task and session views">
           {PRIMARY.map((v) => (
             <Chip key={v.key} active={view === v.key} onClick={() => choose(v.key)} testId={`filter-view-${v.key}`}>
               {v.label} <span className="ml-1 font-num text-xs opacity-70">{counts[v.key]}</span>
@@ -102,7 +117,7 @@ export default function TasksPage() {
           <Select value={secondaryActive ? view : ''} onValueChange={(v) => choose(v as ViewKey)}>
             <SelectTrigger
               className={cn('h-9 w-auto min-w-[6.5rem] rounded-full px-3 text-[0.85rem]', secondaryActive ? 'border-foreground/80 bg-foreground text-background' : 'text-muted-foreground')}
-              aria-label="More task views"
+              aria-label="More task and session views"
               data-testid="select-more-views"
             >
               <SelectValue placeholder="More views" />
@@ -117,7 +132,7 @@ export default function TasksPage() {
         <div className="flex min-w-0 flex-wrap gap-2">
           <div className="relative min-w-0 flex-1 basis-40 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search tasks" className="h-10 w-full pl-8 sm:h-9 sm:w-44" data-testid="input-task-search" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search tasks and sessions" className="h-10 w-full pl-8 sm:h-9 sm:w-44" data-testid="input-task-search" />
           </div>
           <Select value={goalFilter} onValueChange={setGoalFilter}>
             <SelectTrigger className="h-10 min-w-0 flex-1 basis-40 sm:h-9 sm:w-48 sm:flex-none" aria-label="Filter by goal" data-testid="select-task-goal-filter"><SelectValue /></SelectTrigger>
@@ -131,7 +146,9 @@ export default function TasksPage() {
       </div>
 
       <div className="surface p-3 md:p-4">
+        <h2 className="mb-2 px-2 font-display text-lg">{view === 'done' ? 'Completed tasks' : 'Tasks'} <span className="ml-1 font-num text-xs text-muted-foreground">{list.length}</span></h2>
         {list.length === 0 ? (
+          sessionCount > 0 ? <p className="px-2 py-3 text-sm text-muted-foreground">No tasks in this view. Your work sessions are below.</p> :
           <EmptyState title={q || goalFilter !== 'all' ? 'No matches' : meta.empty[0]} body={q || goalFilter !== 'all' ? 'Try clearing the search or goal filter.' : meta.empty[1]} />
         ) : (
           groups.map((g) => (
@@ -144,6 +161,16 @@ export default function TasksPage() {
       </div>
       {view === 'inbox' && list.length > 0 && (
         <p className="mt-3 px-1 text-xs text-muted-foreground">Use the calendar button on a task to schedule it, or select several in the Planner week view.</p>
+      )}
+      {view !== 'archived' && goalFilter !== 'none' && (
+        <div className="mt-5">
+          <WorkSessionsPanel
+            goalId={goalFilter === 'all' ? undefined : goalFilter}
+            filter={sessionFilter}
+            title={view === 'done' ? 'Logged sessions' : 'Work sessions'}
+            defaultDate={view === 'today' ? today : undefined}
+          />
+        </div>
       )}
     </div>
   );

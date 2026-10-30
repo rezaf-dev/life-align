@@ -10,6 +10,7 @@ try {
   tests.push('../adaptive-planner/src/lib/store/sessions.test.ts');
   tests.push('../adaptive-planner/src/lib/reports.test.ts');
   tests.push('../adaptive-planner/src/lib/store/time-tracking.test.ts');
+  tests.push('../adaptive-planner/src/lib/task-views.test.ts');
   const files = tests.map((file) => join(dir, basename(file).replace(/\.ts$/, '.mjs')));
   await Promise.all(tests.map((file, i) => build({ entryPoints: [file], outfile: files[i], bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' })));
   const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' });

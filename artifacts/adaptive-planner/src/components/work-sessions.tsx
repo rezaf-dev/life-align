@@ -448,7 +448,7 @@ export function SessionEntryRow({ metric, entry }: { metric: Metric; entry: Metr
 /* ---------- List ---------- */
 type DialogState = null | { plan: WorkSession | true } | { log: WorkSession | true } | { del: WorkSession };
 
-export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Work sessions' }: { goalId?: string; start?: string; end?: string; defaultDate?: string; title?: string }) {
+export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Work sessions', filter }: { goalId?: string; start?: string; end?: string; defaultDate?: string; title?: string; filter?: (session: WorkSession) => boolean }) {
   const state = useAppState();
   const sessions = state.sessions ?? [];
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -457,7 +457,7 @@ export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Wo
   const when = (s: WorkSession) => (s.status === 'logged' ? s.date : s.plannedDate) ?? '';
   const inRange = (d?: string) => !!d && (!start || d >= start) && (!end || d <= end);
   const list = sessions
-    .filter((s) => (!goalId || s.goalId === goalId) && (goalId ? true : inRange(s.plannedDate) || inRange(s.date)))
+    .filter((s) => (!goalId || s.goalId === goalId) && (goalId || (!start && !end) || inRange(s.plannedDate) || inRange(s.date)) && (!filter || filter(s)))
     .sort((a, b) => (a.status === b.status ? when(a).localeCompare(when(b)) : a.status === 'planned' ? -1 : 1));
   const planned = list.filter((s) => s.status === 'planned');
   const logged = list.filter((s) => s.status === 'logged');
