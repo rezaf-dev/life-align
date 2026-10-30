@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
-import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Repeat, Timer, Trash2, TrendingUp } from 'lucide-react';
+import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Play, Repeat, Timer, Trash2, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -273,6 +273,11 @@ function TaskRowInner({
           {goal && task.status === 'open' && !task.archived && (
             <DropdownMenuItem onSelect={() => sessions.convert(task, goal)} data-testid={`menu-convert-session-${task.id}`}>
               <Timer /> Convert to work session
+            </DropdownMenuItem>
+          )}
+          {goal && !task.archived && (
+            <DropdownMenuItem onSelect={() => sessions.start({ goalId: goal.id, taskId: task.id, title: task.title })} data-testid={`menu-track-time-${task.id}`}>
+              <Play /> Track time
             </DropdownMenuItem>
           )}
           {goal && (

@@ -277,6 +277,7 @@ export function setGoalStatus(id: string, status: GoalStatus, reason: string, so
 
 export function deleteGoal(id: string) {
   update((d) => {
+    if (d.activeTimer?.goalId === id) throw new Error('Finish or discard this goal’s timer before deleting the goal.');
     d.goals = d.goals.filter((g) => g.id !== id);
     if (d.sessions) d.sessions = d.sessions.filter((s) => s.goalId !== id);
     d.tasks.forEach((t) => {
@@ -390,6 +391,7 @@ export function deleteMetric(goalId: string, metricId: string) {
     const m = g.metrics.find((x) => x.id === metricId);
     g.metrics = g.metrics.filter((x) => x.id !== metricId);
     d.sessions?.forEach((s) => { if (s.goalId === goalId && s.metricId === metricId) delete s.metricId; });
+    if (d.activeTimer?.goalId === goalId && d.activeTimer.metricId === metricId) delete d.activeTimer.metricId;
     if (m) g.history.unshift(ev({ kind: 'metric', summary: `Stopped measuring: ${m.name}` }));
   });
 }
@@ -516,6 +518,10 @@ export function splitGoal(
         s.taskIds = s.taskIds.filter((taskId) => d.tasks.some((t) => t.id === taskId && t.goalId === newId));
       }
     });
+    if (d.activeTimer?.goalId === id && d.activeTimer.metricId && opts.metricIds.includes(d.activeTimer.metricId)) {
+      d.activeTimer.goalId = newId;
+      if (d.activeTimer.taskId && !d.tasks.some((t) => t.id === d.activeTimer!.taskId && t.goalId === newId)) delete d.activeTimer.taskId;
+    }
     d.goals.unshift(child);
   });
   return newId;

@@ -109,7 +109,7 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
       notes: session.notes, kind: 'session',
     });
     const remainder = (session.actualMinutes ?? 0) - sum(session.allocations, (a) => a.minutes);
-    if (remainder > 0) rows.push({
+    if (remainder > 1e-8) rows.push({
       id: `${session.id}:general`, date: session.date!, description: session.allocations.length ? `${session.title} — general work` : session.title,
       sessionTitle: session.title, minutes: remainder, notes: session.notes, kind: 'session',
     });
@@ -137,8 +137,8 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
 }
 
 export function formatMinutes(minutes: number): string {
-  const rounded = Math.round(Math.abs(minutes) * 100) / 100;
-  const hours = Math.floor(rounded / 60);
-  const rest = Math.round((rounded % 60) * 100) / 100;
-  return `${minutes < 0 ? '−' : ''}${hours ? `${hours}h` : ''}${hours && rest ? ' ' : ''}${rest || !hours ? `${rest}m` : ''}`;
+  const total = Math.round(Math.abs(minutes) * 60);
+  const hours = Math.floor(total / 3600), mins = Math.floor(total / 60) % 60, seconds = total % 60;
+  const parts = [hours ? `${hours}h` : '', mins ? `${mins}m` : '', seconds ? `${seconds}s` : ''].filter(Boolean);
+  return `${minutes < 0 ? '−' : ''}${parts.join(' ') || '0m'}`;
 }

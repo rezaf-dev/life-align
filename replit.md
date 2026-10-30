@@ -55,6 +55,8 @@ Keep setup optional and task capture title-only. Use progressive disclosure. Def
 
 Goal reports are primarily for understanding progress, completed work, remaining work, and what needs attention—not just timesheets. Client timesheets are optional, scoped to a specific hours/minutes measure and inclusive date range. Export actual work once, never reservations, estimates, or absolute measurement checkpoints. Keep private notes out of client documents unless explicitly included.
 
+Time tracking supports hourly client work, but timers must remain optional alongside manual addition and full correction. A timer is an uncredited draft until reviewed and saved. Preserve elapsed seconds without hidden billing rounding, exclude paused intervals, and split work across local-calendar midnight/month boundaries in its captured time zone. Keep a single active timer per account, protect saves with workspace revision checks, and never treat task completion as permission to add duplicate time. Forgotten long timers need explicit review, not automatic idle deductions.
+
 ## Gotchas
 
 _Populate as you build — sharp edges, "always run X before Y" rules._

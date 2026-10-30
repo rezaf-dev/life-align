@@ -9,17 +9,18 @@ export const workSessionSchema = z.object({
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   taskIds: z.array(z.string()).max(100),
   notes: z.string(), status: z.enum(['planned', 'logged']),
-  date: date.optional(), actualMinutes: z.number().int().positive().max(1440).optional(),
+  date: date.optional(), actualMinutes: z.number().finite().positive().max(1500).optional(),
   allocations: z.array(z.object({
     taskId: z.string().min(1), taskTitle: z.string(), milestoneId: z.string().optional(),
-    milestoneTitle: z.string().optional(), minutes: z.number().int().positive().max(1440),
+    milestoneTitle: z.string().optional(), minutes: z.number().finite().positive().max(1500),
   })).max(100),
   createdAt: z.string(), loggedAt: z.string().optional(), spawnedNextId: z.string().optional(),
   sourceTaskId: z.string().optional(),
+  sourceTimerId: z.string().optional(),
 }).superRefine((s, ctx) => {
   if (s.status === 'logged' && (!s.date || !s.actualMinutes)) ctx.addIssue({ code: 'custom', message: 'Logged sessions need an actual date and duration.' });
   if (s.status === 'planned' && (s.actualMinutes !== undefined || s.allocations.length)) ctx.addIssue({ code: 'custom', message: 'Planned time is not actual work.' });
-  if (s.allocations.reduce((sum, row) => sum + row.minutes, 0) > (s.actualMinutes ?? 0)) ctx.addIssue({ code: 'custom', message: 'Task time cannot exceed the session duration.' });
+  if (s.allocations.reduce((sum, row) => sum + row.minutes, 0) - (s.actualMinutes ?? 0) > 1e-8) ctx.addIssue({ code: 'custom', message: 'Task time cannot exceed the session duration.' });
   if (new Set(s.allocations.map((a) => a.taskId)).size !== s.allocations.length) ctx.addIssue({ code: 'custom', message: 'Allocate time to each task once per session.' });
 });
 export type WorkSession = z.infer<typeof workSessionSchema>;
@@ -74,7 +75,7 @@ export function sessionLedgerIssues(state: {
     const divisor = timeUnitMinutes(metric.unit)!;
     const expected = new Map(session.allocations.map((a) => [a.taskId, a.minutes]));
     const remainder = session.actualMinutes! - session.allocations.reduce((sum, a) => sum + a.minutes, 0);
-    if (remainder > 0) expected.set('', remainder);
+    if (remainder > 1e-8) expected.set('', remainder);
     for (const entry of credits.get(session.id) ?? []) {
       const key = entry.source?.taskId ?? '';
       const minutes = expected.get(key);

@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { SaveWorkspaceBody } from '@workspace/api-zod';
 import { requireApproved } from '../middlewares/access';
 import { stateSchema } from '../lib/planner-state';
+import { isDeepStrictEqual } from 'node:util';
 
 const router: IRouter = Router();
 router.use('/workspace', requireApproved, (req, res, next) => {
@@ -36,7 +37,15 @@ router.put('/workspace', async (req, res) => {
   const [saved] = await db.update(workspacesTable).set({
     state: state.data, revision: sql`${workspacesTable.revision} + 1`, updatedAt: new Date(),
   }).where(and(eq(workspacesTable.userId, req.member!.id), eq(workspacesTable.revision, input.data.revision))).returning();
-  if (!saved) { res.status(409).json({ error: 'A newer workspace was saved in another tab or device. Download your unsaved backup or reload the saved version.' }); return; }
+  if (!saved) {
+    // A committed response can be lost. A retry of the exact saved snapshot is an
+    // acknowledgement, not another write; different stale snapshots still conflict.
+    const [current] = await db.select().from(workspacesTable).where(eq(workspacesTable.userId, req.member!.id));
+    if (current && isDeepStrictEqual(current.state, state.data)) {
+      res.json({ revision: current.revision, updatedAt: current.updatedAt.toISOString() }); return;
+    }
+    res.status(409).json({ error: 'A newer workspace was saved in another tab or device. Download your unsaved backup or reload the saved version.' }); return;
+  }
   res.json({ revision: saved.revision, updatedAt: saved.updatedAt.toISOString() });
 });
 

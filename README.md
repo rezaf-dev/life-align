@@ -16,6 +16,7 @@ It keeps an important distinction clear: **doing the work and achieving the resu
 - **Weekly planning** — make realistic commitments based on your available capacity.
 - **Tasks and subtasks** — organize work, link it to goals and milestones, and schedule recurring tasks.
 - **Work sessions** — reserve project time, log actual durations, and split time across tasks or unplanned work without counting it twice.
+- **Optional work timer** — start, pause, resume, and review actual time before saving. Manual time entry and full corrections remain available.
 - **Measured contributions** — record actual results against tasks or milestones and see how much they contributed to a goal.
 - **Flexible measurements** — track cumulative results, weekly targets, or monthly targets, such as **30 project hours per month**.
 - **Period history** — browse earlier weeks and months without losing their measurements or targets.
@@ -55,6 +56,10 @@ Correcting or deleting logged time updates its original contribution rather than
 To replace an existing “work for one hour” task with a time reservation, choose **Convert to work session** from its task menu. Conversion is explicit: the original task is archived and its past results are preserved. Sessions without a compatible time measure remain time-only. No timer is required.
 
 ### Goal reports and client timesheets
+
+For hourly work, use **Start timer** on a goal, session reservation, or linked task. A compact timer stays available while navigating, and saved timestamps let it continue across refreshes and background tabs. Only one timer can be active per account. **Finish** pauses the timer and opens a review; closing the review keeps the draft paused, without adding any goal credit.
+
+Use **Add time** instead whenever you prefer manual entry. Enter hours, minutes, and optional seconds, or provide a start/end range. Work crossing midnight is split into dated records using the captured time zone. Both timer-created and manual records can be corrected afterward, including description, goal, time measure, date, duration, notes, and task allocations. Timer pauses do not count as work; there is no automatic idle deduction or billing rounding.
 
 Open a goal's **Reports** tab to see measured changes, period totals and targets, completed tasks and milestones, and current work that needs attention. Date filters affect recorded activity; current next steps are labelled separately. Weekly and monthly results stay separated across their calendar resets.
 

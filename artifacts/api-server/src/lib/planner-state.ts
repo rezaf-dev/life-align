@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart, workSessionSchema, sessionLedgerIssues } from '@workspace/api-zod';
+import { ApplyAiOperationsBody, measurementEntrySchema, measurementFrequencySchema, isMeasurementDate, legacyMeasurementStart, workSessionSchema, sessionLedgerIssues, activeWorkTimerSchema, timeUnitMinutes } from '@workspace/api-zod';
 
 export const operationSchema = ApplyAiOperationsBody.shape.operations.element;
 export type Operation = z.infer<typeof operationSchema>;
@@ -53,6 +53,7 @@ export const stateSchema = z.object({
   settings: z.object({ name: text, theme: z.enum(['light', 'dark']), sidebarCollapsed: z.boolean(), onboardedFresh: z.boolean() }).passthrough(),
   goals: z.array(goal).max(5000), tasks: z.array(task).max(30000),
   sessions: z.array(workSessionSchema).max(30000).optional(),
+  activeTimer: activeWorkTimerSchema.optional(),
   weekPlans: z.record(text, z.object({
     weekStart: text, focus: text, capacityMinutes: z.number(), finalized: z.boolean(),
     finalizedAt: text.optional(), commitments: z.array(commitment),
@@ -76,6 +77,13 @@ export const stateSchema = z.object({
   aiHistory: z.array(z.object({ at: text, summary: text })).optional(),
 }).passthrough().superRefine((state, ctx) => {
   for (const message of sessionLedgerIssues(state)) ctx.addIssue({ code: 'custom', path: ['sessions'], message });
+  if (state.activeTimer) {
+    const goal = state.goals.find((g) => g.id === state.activeTimer!.goalId);
+    const metric = goal?.metrics.find((m) => m.id === state.activeTimer!.metricId);
+    if (!goal || (state.activeTimer.metricId && (!metric || !timeUnitMinutes(metric.unit)))) {
+      ctx.addIssue({ code: 'custom', path: ['activeTimer'], message: 'A timer needs an existing goal and an optional time measure from that goal.' });
+    }
+  }
 });
 export type Workspace = z.infer<typeof stateSchema>;
 

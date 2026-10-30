@@ -433,7 +433,10 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
         description="The goal, its milestones, metrics and history are deleted permanently. Its tasks stay in your list without a goal. Consider pausing or cancelling instead to keep the history."
         confirmLabel="Delete goal permanently"
         destructive
-        onConfirm={() => { deleteGoal(goal.id); toast({ title: 'Goal deleted' }); navigate('/goals'); }}
+        onConfirm={() => {
+          try { deleteGoal(goal.id); toast({ title: 'Goal deleted' }); navigate('/goals'); }
+          catch (error) { toast({ title: 'Goal was not deleted', description: error instanceof Error ? error.message : 'Finish or discard its timer first.', variant: 'destructive' }); }
+        }}
       />
     </div>
   );

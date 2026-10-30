@@ -10,8 +10,10 @@ export interface SessionDraft {
 export interface SessionResult {
   date: string; actualMinutes: number; allocations: { taskId: string; minutes: number }[]; notes?: string;
   newTasks?: { key: string; title: string; minutes: number }[];
+  recurrenceAfter?: string;
+  allowedThroughDate?: string;
 }
-function validateDraft(state: AppState, input: SessionDraft) {
+export function validateDraft(state: AppState, input: SessionDraft) {
   const goal = state.goals.find((g) => g.id === input.goalId);
   if (!goal) throw new Error('Choose an existing goal for this session.');
   if (input.metricId) {
@@ -21,7 +23,7 @@ function validateDraft(state: AppState, input: SessionDraft) {
   if (input.taskIds.some((id) => !state.tasks.some((t) => t.id === id && t.goalId === goal.id && !t.archived))) throw new Error('Choose tasks belonging to this goal.');
   if (input.recurrence !== 'none' && !input.plannedDate) throw new Error('Recurring sessions need a planned date.');
 }
-function buildSession(input: SessionDraft): WorkSession {
+export function buildSession(input: SessionDraft): WorkSession {
   return workSessionSchema.parse({ title: input.title.trim(), goalId: input.goalId, metricId: input.metricId || undefined,
     plannedDate: input.plannedDate || undefined, plannedMinutes: input.plannedMinutes, recurrence: input.recurrence,
     taskIds: input.taskIds, notes: input.notes, id: uid(), createdAt: nowStamp(), status: 'planned', allocations: [] });
@@ -60,7 +62,8 @@ function syncCredits(state: AppState, session: WorkSession) {
     });
   };
   session.allocations.forEach((a) => add(a.minutes, a));
-  add(session.actualMinutes! - session.allocations.reduce((sum, a) => sum + a.minutes, 0));
+  const remainder = session.actualMinutes! - session.allocations.reduce((sum, a) => sum + a.minutes, 0);
+  if (remainder > 1e-8) add(remainder);
   // Replace in-place so correcting a session does not move it past a same-day absolute checkpoint.
   for (const g of state.goals) for (const m of g.metrics) {
     m.entries = m.entries.flatMap((entry) => {
@@ -79,10 +82,10 @@ function syncCredits(state: AppState, session: WorkSession) {
 export function logWorkSession(id: string, input: SessionResult) {
   update((state) => logWorkSessionInDraft(state, id, input));
 }
-function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult) {
+export function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult) {
     const session = state.sessions?.find((s) => s.id === id);
     if (!session) throw new Error('This session no longer exists.');
-    if (input.date > todayIso()) throw new Error('Record actual work today or earlier.');
+    if (input.date > (input.allowedThroughDate ?? todayIso())) throw new Error('Record actual work today or earlier.');
     const previousAllocations = session.allocations;
     const newAllocations = (input.newTasks ?? []).map((item) => {
       if (!item.title.trim()) throw new Error('Name the unexpected work.');
@@ -108,14 +111,15 @@ function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult
     syncCredits(state, session);
     if (!wasLogged && session.recurrence !== 'none' && !session.spawnedNextId) {
       const base = session.plannedDate ?? input.date;
+      const afterDate = input.recurrenceAfter && input.recurrenceAfter > input.date ? input.recurrenceAfter : input.date;
       let nextDate: string;
       if (session.recurrence === 'monthly') {
-        let months = Math.max(1, (Number(input.date.slice(0, 4)) - Number(base.slice(0, 4))) * 12 + Number(input.date.slice(5, 7)) - Number(base.slice(5, 7)));
+        let months = Math.max(1, (Number(afterDate.slice(0, 4)) - Number(base.slice(0, 4))) * 12 + Number(afterDate.slice(5, 7)) - Number(base.slice(5, 7)));
         nextDate = addMonthsIso(base, months);
-        if (nextDate <= input.date) nextDate = addMonthsIso(base, ++months);
+        if (nextDate <= afterDate) nextDate = addMonthsIso(base, ++months);
       } else {
         const interval = session.recurrence === 'weekly' ? 7 : 1;
-        nextDate = addDaysIso(base, Math.max(1, Math.floor(daysBetween(base, input.date) / interval) + 1) * interval);
+        nextDate = addDaysIso(base, Math.max(1, Math.floor(daysBetween(base, afterDate) / interval) + 1) * interval);
       }
       const next = buildSession({ ...session, plannedDate: nextDate });
       // A session reserves time; specific task assignments don't automatically recur.

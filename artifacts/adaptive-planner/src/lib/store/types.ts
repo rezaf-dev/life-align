@@ -4,6 +4,7 @@ export type Priority = 'high' | 'medium' | 'low';
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type MetricKind = 'outcome' | 'leading';
 export type { WorkSession } from '@workspace/api-zod';
+export type { ActiveWorkTimer } from '@workspace/api-zod';
 
 export interface Strategy {
   summary: string;
@@ -189,6 +190,7 @@ export interface AppState {
   goals: Goal[];
   tasks: Task[];
   sessions?: import('@workspace/api-zod').WorkSession[];
+  activeTimer?: import('@workspace/api-zod').ActiveWorkTimer;
   weekPlans: Record<string, WeekPlan>;
   periodNotes: Record<string, string>;
   reviews: Review[];

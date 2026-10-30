@@ -31,6 +31,7 @@ import { useAccess } from '@/components/auth/access-provider';
 import { SignOutButton } from '@/components/auth/auth-chrome';
 import { SyncStatus } from '@/components/auth/sync-status';
 import { useAdminUsers } from '@/pages/admin';
+import { ActiveTimerControls } from '@/components/work-session-provider';
 
 const NAV = [
   { href: '/overview', label: 'Overview', icon: Compass, test: 'overview' },
@@ -225,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className={cn('flex min-w-0 flex-1 flex-col transition-[padding] duration-300', assistant.open && '2xl:pr-[440px]')}>
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/85 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/85 px-4 py-3 backdrop-blur md:hidden">
           {brand(false)}
           <div className="flex items-center gap-2">
             <SyncStatus collapsed />
@@ -246,6 +247,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </SheetContent>
         </Sheet>
+        <ActiveTimerControls />
         <main id="main" className="mx-auto w-full max-w-[1240px] flex-1 px-4 pb-20 pt-6 md:px-8 md:pt-10 lg:px-12">
           {hasDemo && (
             <p className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground" data-testid="text-sample-notice">
