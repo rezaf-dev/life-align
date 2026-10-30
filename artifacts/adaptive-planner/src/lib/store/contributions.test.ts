@@ -1,7 +1,7 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyWorkspace, getState, hydrateState, setWorkspaceWriter } from './store';
-import { completeTaskWithResult, deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry, addMetric, changeMetricTarget } from './actions';
+import { updateMetric, completeTaskWithResult, deleteMilestone, deleteTask, editContribution, logMetric, recordContribution, toggleTask, updateTask, deleteMetricEntry, addMetric, changeMetricTarget } from './actions';
 import { contributionAmount, metricValueAt, metricProgress, goalHealth, measurementTargetAt } from './selectors';
 import type { Goal, Task } from './types';
 import { applyOperations } from '../../../../api-server/src/lib/planner-operations';
@@ -65,6 +65,55 @@ test('target edits keep previous periods intact through server validation and ac
   assert.equal(measurementTargetAt(m), 40);
 });
 const metric = () => getState().goals[0].metrics[0];
+test('correcting a measure type and name keeps results, dated targets and source attribution', () => {
+  changeMetricTarget('goal', 'metric', 30, 'Monthly work', 'monthly');
+  recordContribution('goal', 'metric', { amount: 2, date: '2024-01-02', taskId: 'task' });
+  changeMetricTarget('goal', 'metric', 40, 'More work');
+  const before = structuredClone(metric());
+  updateMetric('goal', 'metric', { name: 'Project hours', kind: 'leading', unit: before.unit, baseline: before.baseline });
+  assert.equal(metric().kind, 'leading');
+  assert.equal(metric().name, 'Project hours');
+  assert.equal(metric().id, before.id);
+  assert.equal(metric().frequency, before.frequency);
+  assert.deepEqual(metric().entries, before.entries);
+  assert.deepEqual(metric().targetHistory, before.targetHistory);
+  assert.equal(metric().target, before.target);
+  assert.equal(contributionAmount(metric(), { taskId: 'task' }, '2024-01-31'), 2);
+  const saved = applyOperations(getState(), [{ key: 'preserve-edit', type: 'update_task', taskId: 'task', notes: 'Keep corrected measure' }], 'measure-edit-preservation').state;
+  hydrateState(saved);
+  assert.equal(metric().kind, 'leading');
+  assert.equal(metric().name, 'Project hours');
+  assert.deepEqual(metric().entries, before.entries);
+  assert.ok(getState().goals[0].history.some((event) => event.summary === 'Measure updated: Project hours'));
+});
+test('measure corrections can switch both directions and edit an empty definition without changing its target', () => {
+  updateMetric('goal', 'metric', { name: 'Time', kind: 'leading', unit: 'hours', baseline: 2 });
+  assert.equal(metric().baseline, 2);
+  assert.equal(metric().unit, 'hours');
+  assert.equal(metric().target, 50);
+  updateMetric('goal', 'metric', { name: 'Time', kind: 'outcome', unit: 'hours', baseline: 2 });
+  assert.equal(metric().kind, 'outcome');
+});
+test('measure edits reject invalid input and reinterpretation of recorded units or baseline atomically', () => {
+  recordContribution('goal', 'metric', { amount: 2, date: '2024-01-02', taskId: 'task' });
+  const before = structuredClone(getState());
+  const valid = { name: 'Customers', kind: 'outcome' as const, unit: 'customers', baseline: 0 };
+  for (const patch of [{ ...valid, name: ' ' }, { ...valid, unit: 'hours' }, { ...valid, baseline: 1 }]) {
+    assert.throws(() => updateMetric('goal', 'metric', patch));
+    assert.deepEqual(getState(), before);
+  }
+  assert.throws(() => updateMetric('goal', 'missing', valid));
+  assert.throws(() => updateMetric('missing', 'metric', valid));
+});
+test('recurring starting values stay zero and empty measures reject nonfinite values', () => {
+  const valid = { name: 'Hours', kind: 'leading' as const, unit: 'hours', baseline: 0 };
+  assert.throws(() => updateMetric('goal', 'metric', { ...valid, baseline: Infinity }));
+  changeMetricTarget('goal', 'metric', 30, 'Weekly hours', 'weekly');
+  assert.throws(() => updateMetric('goal', 'metric', { ...valid, baseline: 2 }));
+  updateMetric('goal', 'metric', valid);
+  assert.equal(metric().baseline, 0);
+  assert.equal(metric().frequency, 'weekly');
+});
 test('finishing with a result publishes completion and attribution in one workspace write', () => {
   let writes = 0;
   setWorkspaceWriter((next) => {

@@ -37,6 +37,7 @@ import { CheckButton } from '@/components/check-button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, FormDialog } from '@/components/form-dialog';
 import { EditGoalDialog, LogMetricDialog } from '@/components/goal-dialogs';
+import { EditMeasureDialog } from '@/components/edit-measure-dialog';
 import { AreaTag, EmptyState, HealthPill, PaceBar, SampleMark, Section, StatusPill } from '@/components/primitives';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { QuickAdd } from '@/components/quick-add';
@@ -78,6 +79,7 @@ type DialogKind =
   | { deleteMs: string }
   | { log: string | undefined; date?: string }
   | { metricTarget: string }
+  | { editMetric: string }
   | { deleteMetric: string }
   | { record: RecordResultTarget };
 
@@ -317,7 +319,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
                         <div className="mb-3 text-sm font-medium">{grp.label} <span className="font-normal text-muted-foreground">&middot; {grp.hint}</span></div>
                         <div className="space-y-5">
                           {grp.list.map((m) => (
-                            <MetricBlock key={m.id} goal={goal} metric={m} onRecord={(entryId, date) => setDialog({ record: { metricId: m.id, entryId, date } })} onLog={(date) => setDialog({ log: m.id, date })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
+                            <MetricBlock key={m.id} goal={goal} metric={m} onEdit={() => setDialog({ editMetric: m.id })} onRecord={(entryId, date) => setDialog({ record: { metricId: m.id, entryId, date } })} onLog={(date) => setDialog({ log: m.id, date })} onTarget={() => setDialog({ metricTarget: m.id })} onDelete={() => setDialog({ deleteMetric: m.id })} />
                           ))}
                         </div>
                       </div>
@@ -355,6 +357,10 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       </Tabs>
 
       {/* ---------- Dialogs ---------- */}
+      {typeof dialog === 'object' && dialog && 'editMetric' in dialog && (() => {
+        const metric = goal.metrics.find((m) => m.id === dialog.editMetric);
+        return metric ? <EditMeasureDialog key={metric.id} goalId={goal.id} metric={metric} onClose={close} /> : null;
+      })()}
       <EditGoalDialog goal={goal} open={dialog === 'edit'} onOpenChange={(o) => !o && close()} />
       <StrategyDialog goal={goal} open={dialog === 'strategy'} onClose={close} />
       <ReasonDateDialog
@@ -436,7 +442,7 @@ function Fact({ label, value, sub, onClick, testId }: { label: string; value: st
   );
 }
 
-function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onRecord: (entryId?: string, date?: string) => void; onLog: (date?: string) => void; onTarget: () => void; onDelete: () => void }) {
+function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete }: { goal: Goal; metric: Metric; onEdit: () => void; onRecord: (entryId?: string, date?: string) => void; onLog: (date?: string) => void; onTarget: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [viewAt, setViewAt] = useState<string | null>(null);
   const today = todayIso();
@@ -532,6 +538,7 @@ function MetricBlock({ goal, metric, onRecord, onLog, onTarget, onDelete }: { go
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onRecord(undefined, isHistorical ? at : undefined)} data-testid={`button-record-${metric.id}`}><TrendingUp /> Contribution</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onLog(isHistorical ? at : undefined)} data-testid={`button-log-${metric.id}`}><LineChart /> {recurring ? 'Log period total' : 'Log current value'}</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onTarget} data-testid={`button-target-${metric.id}`}><Target /> Target</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={onEdit} aria-label={`Edit measure ${metric.name}`} data-testid={`button-edit-metric-${metric.id}`}><Pencil /> Edit</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} data-testid={`button-entries-${metric.id}`}>
           {timeline.length} {recurring ? 'in period' : 'entries'} <ChevronDown className={cn('transition-transform', expanded && 'rotate-180')} />
         </Button>

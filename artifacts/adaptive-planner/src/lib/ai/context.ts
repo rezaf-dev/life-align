@@ -1,5 +1,5 @@
 import { addDaysIso, monthStartIso, nextMonday, todayIso, weekStartIso } from '@/lib/dates';
-import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt, measurementPeriod, measurementTargetAt } from '@/lib/store/selectors';
+import { completedBetween, goalHealth, isOpen, isOverdue, metricValueAt, measurementEntries, measurementPeriod, measurementTargetAt } from '@/lib/store/selectors';
 import type { AppState, Goal, Task } from '@/lib/store/types';
 import type { Operation, Screen } from './types';
 import { periodContext } from './context-periods';
@@ -14,14 +14,15 @@ const compactTask = (t: Task) => ({
   dueDate: t.dueDate,
   priority: t.priority,
   effort: t.effort,
+  notes: t.notes.slice(0, 600),
   recurrence: t.recurrence !== 'none' ? t.recurrence : undefined,
   reminder: t.reminder,
   status: t.status,
   completedAt: t.completedAt,
 });
 
-function compactGoal(g: Goal, deep: boolean, tasks: Task[]) {
-  const h = goalHealth(g);
+export function compactGoal(g: Goal, deep: boolean, tasks: Task[], today = todayIso()) {
+  const h = goalHealth(g, today);
   const base = {
     id: g.id,
     title: g.title,
@@ -44,10 +45,11 @@ function compactGoal(g: Goal, deep: boolean, tasks: Task[]) {
       unit: m.unit,
       kind: m.kind,
       baseline: m.baseline,
-      target: measurementTargetAt(m),
+      target: measurementTargetAt(m, today),
       frequency: m.frequency ?? 'cumulative',
-      period: measurementPeriod(m),
-      current: metricValueAt(m),
+      period: measurementPeriod(m, today),
+      current: metricValueAt(m, today),
+      hasRecordedValueInPeriod: measurementEntries(m, today).length > 0,
       recent: deep ? [...m.entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map((e) => ({
         date: e.date, value: e.value, mode: e.mode ?? 'absolute-observation', source: e.source,
       })) : undefined,
@@ -55,7 +57,42 @@ function compactGoal(g: Goal, deep: boolean, tasks: Task[]) {
     openTasks: tasks.filter((t) => t.goalId === g.id && isOpen(t)).length,
   };
   if (!deep) return base;
-  return { ...base, history: g.history.slice(0, 12).map((e) => ({ at: e.at.slice(0, 10), kind: e.kind, summary: e.summary, reason: e.reason, from: e.from, to: e.to })) };
+  const linkedOpenTasks = tasks.filter((t) => t.goalId === g.id && isOpen(t));
+  const milestones = [...g.milestones].filter((m) => !m.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return {
+    ...base,
+    planning: {
+      asOf: today,
+      goalDeadline: g.targetDate,
+      daysUntilGoalDeadline: Math.round((Date.parse(g.targetDate) - Date.parse(today)) / 86400000),
+      nextIncompleteMilestoneId: milestones[0]?.id,
+      incompleteMilestones: milestones.map((m) => ({
+        ...m,
+        overdue: m.dueDate < today,
+        openTaskIds: linkedOpenTasks.filter((t) => t.milestoneId === m.id).slice(0, 50).map((t) => t.id),
+      })),
+      measures: g.metrics.map((m) => {
+        const target = measurementTargetAt(m, today);
+        const current = metricValueAt(m, today);
+        const period = measurementPeriod(m, today);
+        const direction = Math.sign(target - m.baseline) || 1;
+        return {
+          metricId: m.id, name: m.name, kind: m.kind, unit: m.unit,
+          current, target, frequency: m.frequency ?? 'cumulative', period,
+          valueBasis: measurementEntries(m, today).length ? 'recorded results' : 'starting value only; no recorded result in this period',
+          remaining: Math.max(0, (target - current) * direction),
+          direction: direction > 0 ? 'increase' : 'decrease',
+          periodPlanningDeadline: period && period.end < g.targetDate ? period.end : g.targetDate,
+        };
+      }),
+      existingOpenTaskCount: linkedOpenTasks.length,
+      existingOpenTaskIds: linkedOpenTasks.slice(0, 50).map((t) => t.id),
+      existingTasksTruncated: linkedOpenTasks.length > 50,
+      measurementMilestoneLinks: 'No explicit measure-to-milestone mapping is stored. Task-to-milestone links are stored; any proposed measure alignment is a planning assumption, not a saved relationship.',
+      quantityRule: 'Task quantities are planned work only. Never subtract them from actual measured progress or assume completed tasks produced unrecorded results.',
+    },
+    history: g.history.slice(0, 12).map((e) => ({ at: e.at.slice(0, 10), kind: e.kind, summary: e.summary, reason: e.reason, from: e.from, to: e.to })),
+  };
 }
 
 /**
@@ -85,6 +122,10 @@ export function buildContext(
   const horizon = addDaysIso(nextWs, 13);
   const relevant = new Map<string, Task>();
   const add = (t: Task) => relevant.set(t.id, t);
+  // Put focused records first: the server bounds arrays to 80 items.
+  // Busy unrelated weeks must not hide the tasks this plan needs to preserve.
+  if (focusTask) add(focusTask);
+  if (focusGoal) live.filter((t) => t.goalId === focusGoal.id && (isOpen(t) || (t.completedAt ?? '') >= addDaysIso(today, -30))).slice(0, 50).forEach(add);
   live.filter((t) => isOverdue(t, today)).slice(0, 25).forEach(add);
   live.filter((t) => isOpen(t) && t.plannedDate && t.plannedDate >= ws && t.plannedDate <= horizon).slice(0, 60).forEach(add);
   live.filter((t) => isOpen(t) && !t.plannedDate).slice(0, 30).forEach(add);
@@ -146,7 +187,7 @@ export function buildContext(
     focusTask: focusTask
       ? { ...compactTask(focusTask), notes: focusTask.notes, subtasks: live.filter((t) => t.parentTaskId === focusTask.id).map(compactTask) }
       : undefined,
-    goals: activeGoals.filter((g) => g.id !== focusGoal?.id).map((g) => compactGoal(g, opts.screen === 'goals' || wantsReview, state.tasks)),
+    goals: activeGoals.filter((g) => g.id !== focusGoal?.id).map((g) => compactGoal(g, opts.screen === 'goals' || wantsReview || msg.includes(g.title.toLowerCase()), state.tasks)),
     pastGoals: archivedGoals,
     tasks: [...relevant.values()].map(compactTask),
     taskCounts: {

@@ -349,6 +349,34 @@ export function addMetric(goalId: string, m: Omit<Metric, 'id' | 'entries'>) {
   });
 }
 
+/** Correct a measure's definition without replacing its ledger or dated targets. */
+export function updateMetric(
+  goalId: string,
+  metricId: string,
+  patch: Pick<Metric, 'name' | 'unit' | 'kind' | 'baseline'>,
+) {
+  const name = patch.name.trim();
+  const unit = patch.unit.trim();
+  if (!name) throw new Error('Enter a measure name.');
+  if (patch.kind !== 'outcome' && patch.kind !== 'leading') throw new Error('Choose Result or Activity.');
+  update((d) => {
+    const goal = findGoal(d, goalId);
+    const metric = goal.metrics.find((m) => m.id === metricId);
+    if (!metric) throw new Error('That measure no longer exists.');
+    if (metric.entries.length && (unit !== metric.unit || patch.baseline !== metric.baseline)) {
+      throw new Error('Units and starting value cannot change after results are recorded. Add a separate measure to keep those results accurate.');
+    }
+    validateMetricDefinition({ ...metric, baseline: patch.baseline });
+    const label = (m: Pick<Metric, 'name' | 'unit' | 'kind' | 'baseline'>) =>
+      `${m.name} · ${m.kind === 'outcome' ? 'Result' : 'Activity'} · ${m.unit || 'no unit'} · starting at ${m.baseline}`;
+    const from = label(metric);
+    const next = { name, unit, kind: patch.kind, baseline: patch.baseline };
+    if (metric.name === name && metric.unit === unit && metric.kind === patch.kind && metric.baseline === patch.baseline) return;
+    Object.assign(metric, next);
+    goal.history.unshift(ev({ kind: 'metric', summary: `Measure updated: ${name}`, from, to: label(metric) }));
+  });
+}
+
 export function deleteMetric(goalId: string, metricId: string) {
   update((d) => {
     const g = findGoal(d, goalId);
