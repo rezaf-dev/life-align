@@ -1,12 +1,12 @@
 import { activeWorkTimerSchema, timeTrackingDate, timerWorkDoneForDays, workDoneListSchema, type ActiveWorkTimer } from '@workspace/api-zod';
 import { nowStamp, uid } from '@/lib/dates';
 import { update } from './store';
-import { buildSession, logWorkSessionInDraft, validateDraft, type SessionDraft, type SessionResult } from './sessions';
+import { applySessionOutcome, buildSession, logWorkSessionInDraft, validateDraft, type SessionDraft, type SessionResult } from './sessions';
 import type { AppState } from './types';
 
 export interface TimerStartInput { title: string; goalId: string; metricId?: string; taskId?: string; sessionId?: string }
 export interface WorkDayInput { date: string; actualMinutes: number; allocations: { taskId: string; minutes: number }[]; workDone?: string[] }
-export interface TimerSaveInput { title: string; goalId: string; metricId?: string; notes: string; days: WorkDayInput[]; workDoneSnapshot?: ActiveWorkTimer['workDone'] }
+export interface TimerSaveInput { title: string; goalId: string; metricId?: string; notes: string; days: WorkDayInput[]; workDoneSnapshot?: ActiveWorkTimer['workDone']; outcome?: SessionResult['outcome']; remainingDate?: string }
 export interface LoggedWorkEdit extends SessionResult { title: string; goalId: string; metricId?: string }
 const stamp = () => new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
 function draft(input: { title: string; goalId: string; metricId?: string; notes?: string }): SessionDraft {
@@ -107,6 +107,8 @@ export function saveWorkTimer(timerId: string, input: TimerSaveInput): string[] 
       const saved = (state.sessions ?? []).filter((s) => s.sourceTimerId === timerId);
       const pending = [...input.days];
       const same = saved.length === pending.length && saved.every((s) => {
+        if (s.sessionOutcome && s.sessionOutcome !== (input.outcome ?? 'finish')) return false;
+        if (s.sessionOutcome === 'replan' && state.sessions?.find((r) => r.id === s.remainderSessionId)?.plannedDate !== input.remainingDate) return false;
         if (s.title !== input.title.trim() || s.goalId !== input.goalId || s.metricId !== input.metricId || s.notes !== input.notes) return false;
         const index = pending.findIndex((d) => d.date === s.date && Math.abs(d.actualMinutes - s.actualMinutes!) < 1e-8 &&
           (d.workDone === undefined || JSON.stringify(workDoneListSchema.parse(d.workDone)) === JSON.stringify(s.workDone ?? [])) &&
@@ -131,9 +133,10 @@ export function saveWorkTimer(timerId: string, input: TimerSaveInput): string[] 
       session.title = input.title.trim(); session.metricId = input.metricId; session.notes = input.notes;
       session.sourceTimerId = timer.id;
       logWorkSessionInDraft(state, session.id, { ...day, workDone: day.workDone ?? workDone[index], notes: input.notes, recurrenceAfter: lastDate,
-        allowedThroughDate: timeTrackingDate(timer.timezone) });
+        allowedThroughDate: timeTrackingDate(timer.timezone) }, true);
       ids.push(session.id);
     });
+    if (original) applySessionOutcome(state, original, input.days.reduce((sum, day) => sum + day.actualMinutes, 0), input.outcome, input.remainingDate);
     state.activeTimer = undefined;
   });
   return ids;

@@ -11,12 +11,13 @@ import { LiveWorkDoneEditor, WorkDoneField, cleanWorkDone } from '@/components/w
 import { DurationInput } from '@/components/duration-input';
 import { EffectNote, GoalSelect, MeasureSelect, NONE, timeMetrics } from '@/components/work-sessions';
 import { useToast } from '@/hooks/use-toast';
-import { fmt } from '@/lib/dates';
+import { fmt, todayIso } from '@/lib/dates';
 import { discardWorkTimer, pauseWorkTimer, resumeWorkTimer, saveWorkTimer, startWorkTimer } from '@/lib/store/time-tracking';
 import { formatMinutes } from '@/lib/reports';
 import { useAppState } from '@/lib/store/store';
 import { flushWorkspace } from '@/lib/workspace-sync';
 import { cn } from '@/lib/utils';
+import { SessionOutcomeChoice, outcomeReady, type SessionOutcome } from '@/components/session-outcome';
 
 export const LONG_SECONDS = 8 * 3600;
 const MAX_DAY_SECONDS = 1500 * 60;
@@ -221,6 +222,9 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const [notes, setNotes] = useState('');
   const [confirmLong, setConfirmLong] = useState(false);
   const action = useStagedAction();
+  const [outcome, setOutcome] = useState<SessionOutcome | ''>('');
+  const [today] = useState(todayIso);
+  const [remainingDate, setRemainingDate] = useState(today);
   const goal = state.goals.find((g) => g.id === gid);
   const goals = state.goals.filter((g) => g.status === 'active' || g.status === 'paused' || g.id === timer?.goalId);
   const tasks = state.tasks.filter((t) => t.goalId === gid && !t.archived && (t.status === 'open' || rows.some((r) => r.allocs.some((a) => a.taskId === t.id))));
@@ -229,7 +233,9 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const long = total >= LONG_SECONDS;
   const sumOf = (r: DayRow) => r.allocs.reduce((a, x) => a + x.seconds, 0);
   const rowsOk = rows.every((r) => r.seconds >= 0 && r.seconds <= MAX_DAY_SECONDS && sumOf(r) <= r.seconds && r.allocs.every((a) => a.seconds > 0) && !!r.date && r.date <= maxDate);
-  const valid = !!timer && !!goal && !!title.trim() && total > 0 && rowsOk && (!long || confirmLong);
+  const linked = timer?.sessionId ? state.sessions?.find((x) => x.id === timer.sessionId && x.goalId === gid && x.status === 'planned') : undefined;
+  const short = !!linked && total > 0 && total < linked.plannedMinutes * 60;
+  const valid = !!timer && !!goal && !!title.trim() && total > 0 && rowsOk && (!long || confirmLong) && outcomeReady(short, outcome, remainingDate, today);
   const patch = (key: string, f: (r: DayRow) => DayRow) => setRows((s) => s.map((r) => (r.key === key ? f(r) : r)));
 
   if (!timer) {
@@ -250,6 +256,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
       days: kept.map((r, i) => ({ date: r.date, actualMinutes: r.seconds / 60,
         workDone: cleanWorkDone(i === kept.length - 1 ? [...r.workDone, ...orphans] : r.workDone),
         allocations: r.allocs.filter((a) => tasks.some((t) => t.id === a.taskId)).map((a) => ({ taskId: a.taskId, minutes: a.seconds / 60 })) })),
+      ...(short ? { outcome: outcome || 'finish', remainingDate: outcome === 'replan' ? remainingDate : outcome === 'continue' ? today : undefined } : {}),
     });
   }, () => { toast({ title: 'Time recorded', description: `${formatMinutes(total / 60)} saved${rows.length > 1 ? ` across ${rows.length} days` : ''}.` }); onClose(); });
 
@@ -327,6 +334,10 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
       <Field label="Private notes" htmlFor="finish-notes" hint="Internal. Not on client timesheets unless you choose to include notes.">
         <Textarea id="finish-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={action.frozen} data-testid="input-finish-notes" />
       </Field>
+      {short && linked && (
+        <SessionOutcomeChoice actualMinutes={total / 60} plannedMinutes={linked.plannedMinutes} value={outcome} onChange={setOutcome}
+          date={remainingDate} onDateChange={setRemainingDate} today={today} disabled={action.frozen} testId="finish-outcome" />
+      )}
       {long && (
         <label className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm" data-testid="warning-finish-long">
           <input type="checkbox" className="mt-0.5 size-4 accent-[hsl(var(--primary))]" checked={confirmLong} disabled={action.frozen} onChange={(e) => setConfirmLong(e.target.checked)} data-testid="checkbox-confirm-long" />

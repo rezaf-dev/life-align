@@ -1,4 +1,4 @@
-import { timeUnitMinutes, workSessionSchema, type WorkSession } from '@workspace/api-zod';
+import { isMeasurementDate, timeUnitMinutes, workSessionSchema, type WorkSession } from '@workspace/api-zod';
 import { addDaysIso, addMonthsIso, daysBetween, nowStamp, todayIso, uid } from '@/lib/dates';
 import { update } from './store';
 import type { AppState, MetricEntry, Recurrence } from './types';
@@ -14,6 +14,36 @@ export interface SessionResult {
   newTasks?: { key: string; title: string; minutes: number }[];
   recurrenceAfter?: string;
   allowedThroughDate?: string;
+  outcome?: 'finish' | 'continue' | 'replan';
+  remainingDate?: string;
+}
+export type SessionOutcome = NonNullable<SessionResult['outcome']>;
+
+/** Actual work stays in the ledger; unfinished reserved time becomes one linked plan. */
+export function applySessionOutcome(
+  state: AppState, session: WorkSession, actualMinutes: number,
+  outcome: SessionOutcome = 'finish', remainingDate?: string,
+) {
+  if (!['finish', 'continue', 'replan'].includes(outcome)) throw new Error('Choose what happens to the remaining time.');
+  const remaining = session.plannedMinutes - actualMinutes;
+  if (outcome === 'finish' || remaining < 1e-8) {
+    session.sessionOutcome = 'finish';
+    return;
+  }
+  const date = outcome === 'continue' ? todayIso() : remainingDate;
+  if (!date || !isMeasurementDate(date) || date < todayIso()) throw new Error('Choose today or a future date for the remaining time.');
+  if (session.remainderSessionId) throw new Error('This session already has a remaining plan. Edit that plan instead.');
+  const remainder = buildSession({
+    ...session, plannedMinutes: remaining, plannedDate: date, recurrence: 'none',
+    taskIds: session.taskIds.filter((id) => state.tasks.some((t) => t.id === id && t.goalId === session.goalId && !t.archived && t.status === 'open')),
+    workDone: undefined, notes: '',
+  });
+  remainder.continuationOfId = session.id;
+  session.originalPlannedMinutes = session.plannedMinutes;
+  session.plannedMinutes = actualMinutes;
+  session.sessionOutcome = outcome;
+  session.remainderSessionId = remainder.id;
+  (state.sessions ??= []).push(remainder);
 }
 export function validateDraft(state: AppState, input: SessionDraft) {
   const goal = state.goals.find((g) => g.id === input.goalId);
@@ -85,7 +115,7 @@ function syncCredits(state: AppState, session: WorkSession) {
 export function logWorkSession(id: string, input: SessionResult) {
   update((state) => logWorkSessionInDraft(state, id, input));
 }
-export function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult) {
+export function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult, deferOutcome = false) {
     const session = state.sessions?.find((s) => s.id === id);
     if (!session) throw new Error('This session no longer exists.');
     if (session.status === 'skipped') throw new Error('Skipped sessions cannot record work. Add a new time entry instead.');
@@ -132,6 +162,7 @@ export function logWorkSessionInDraft(state: AppState, id: string, input: Sessio
       state.sessions!.push(next);
       session.spawnedNextId = next.id;
     }
+    if (!wasLogged && !deferOutcome) applySessionOutcome(state, session, input.actualMinutes, input.outcome, input.remainingDate);
 }
 /** Capture unexpected work and its actual contribution in one account-state write. */
 export function recordUnplannedSession(input: SessionDraft, result: SessionResult): string {

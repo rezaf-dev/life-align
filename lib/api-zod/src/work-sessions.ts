@@ -7,7 +7,10 @@ export const workDoneListSchema = z.array(z.string().max(2000)).max(200)
 export const workSessionSchema = z.object({
   id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string().min(1),
   metricId: z.string().optional(), plannedDate: date.optional(),
-  plannedMinutes: z.number().int().min(0).max(1440),
+  plannedMinutes: z.number().finite().min(0).max(1440),
+  originalPlannedMinutes: z.number().finite().positive().max(1440).optional(),
+  continuationOfId: z.string().optional(), remainderSessionId: z.string().optional(),
+  sessionOutcome: z.enum(['finish', 'continue', 'replan']).optional(),
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   taskIds: z.array(z.string()).max(100),
   notes: z.string(), status: z.enum(['planned', 'logged', 'skipped']),

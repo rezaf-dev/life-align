@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Clock3, Hourglass, Pencil, Play, Plus, Repeat, Timer, Trash2, X } from 'lucide-react';
+import { Check, Clock3, CornerDownRight, Hourglass, Pencil, Play, Plus, Repeat, Timer, Trash2, X } from 'lucide-react';
 import { manualTimeDays, timeUnitMinutes, sessionWorkDone } from '@workspace/api-zod';
 import { WorkDoneField, WorkDonePreview, cleanWorkDone } from '@/components/work-done-editor';
 import { DurationInput } from '@/components/duration-input';
@@ -20,6 +20,7 @@ import { useAppState } from '@/lib/store/store';
 import type { Goal, Metric, MetricEntry, Recurrence, Task, WorkSession } from '@/lib/store/types';
 import { flushWorkspace } from '@/lib/workspace-sync';
 import { cn } from '@/lib/utils';
+import { SessionOutcomeChoice, outcomeReady, type SessionOutcome } from '@/components/session-outcome';
 
 export const NONE = '__time_only__';
 const errText = (applied: boolean, err: unknown) =>
@@ -96,7 +97,7 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
   const frozen = pending || staged;
   const goalTasks = state.tasks.filter((t) => t.goalId === gid && !t.archived && (t.status === 'open' || taskIds.includes(t.id)));
   const n = Number(minutes);
-  const valid = !!goal && !!title.trim() && Number.isInteger(n) && n >= 0 && n <= 1440 && (recurrence === 'none' || !!plannedDate);
+  const valid = !!goal && !!title.trim() && Number.isFinite(n) && n >= 0 && n <= 1440 && (recurrence === 'none' || !!plannedDate);
 
   const save = async () => {
     if (pending) return;
@@ -126,7 +127,7 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
           <Input id="session-date" type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} disabled={frozen} className="font-num" data-testid="input-session-date" />
         </Field>
         <Field label="Reserved minutes" htmlFor="session-minutes" hint={n > 0 ? mins(n) : undefined}>
-          <Input id="session-minutes" type="number" min={0} max={1440} step={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} disabled={frozen} className="font-num" data-testid="input-session-minutes" />
+          <Input id="session-minutes" type="number" min={0} max={1440} step="any" value={minutes} onChange={(e) => setMinutes(e.target.value)} disabled={frozen} className="font-num" data-testid="input-session-minutes" />
         </Field>
       </div>
       <Field label="Repeat" hint={recurrence !== 'none' ? 'The next session is created when you log this one. Task picks do not repeat.' : undefined}>
@@ -206,6 +207,8 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   const [pending, setPending] = useState(false);
   const [staged, setStaged] = useState(false);
   const [error, setError] = useState('');
+  const [outcome, setOutcome] = useState<SessionOutcome | ''>('');
+  const [remainingDate, setRemainingDate] = useState(today);
   const sessionId = useRef<string | undefined>(session?.id);
   const logged = useRef(false);
   const frozen = pending || staged;
@@ -241,6 +244,10 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
     ? range.days.length > 0 && !range.err && range.days.every((d) => d.seconds <= MAX_SECONDS && d.date <= today)
     : seconds > 0 && seconds <= MAX_SECONDS && !!day && day <= today && rowsValid && remainder >= 0);
   const metricOut = metricId === NONE ? undefined : metricId;
+  // Only an existing planned session logged short of its plan asks what happens to the rest.
+  const plannedSession = !!session && session.status === 'planned' && mode === 'duration';
+  const short = plannedSession && seconds > 0 && seconds < (session?.plannedMinutes ?? 0) * 60;
+  const outcomeOk = outcomeReady(short, outcome, remainingDate, today);
 
   const save = async () => {
     if (pending) return;
@@ -257,7 +264,11 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
         } else {
           const result = { date: day, actualMinutes: seconds / 60, notes, allocations, workDone: cleanWorkDone(single),
             newTasks: rows.filter((r) => r.newTitle).map((r) => ({ key: r.key, title: r.newTitle!, minutes: r.seconds / 60 })) };
-          if (sessionId.current) logWorkSession(sessionId.current, result);
+          if (sessionId.current) {
+            logWorkSession(sessionId.current, short
+              ? { ...result, outcome: outcome || 'finish', remainingDate: outcome === 'replan' ? remainingDate : outcome === 'continue' ? today : undefined }
+              : result);
+          }
           else sessionId.current = recordUnplannedSession({ title: title.trim(), goalId: gid, metricId: metricOut, plannedMinutes: 0, recurrence: 'none', taskIds: [], notes }, result);
         }
         logged.current = true; setStaged(true);
@@ -272,8 +283,8 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   return (
     <FormDialog open onOpenChange={(o) => { if (!o && !pending) onClose(); }} wide
       title={isCorrection ? 'Edit logged time' : isNew ? 'Add time' : `Log time: ${session.title}`}
-      description={isCorrection ? 'Edits replace this record and its measure credit. Repeating plans are not changed.' : 'Enter the actual time you spent. It is recorded once; editing later corrects it.'}
-      submitLabel={pending ? 'Saving…' : staged ? 'Retry saving' : isCorrection ? 'Save changes' : 'Add time'} canSubmit={!pending && (staged || valid)} onSubmit={() => void save()}>
+      description={isCorrection ? `Edits replace this record and its measure credit. Repeating plans${session?.remainderSessionId ? ' and the separately planned remaining time' : ''} are not changed.` : 'Enter the actual time you spent. It is recorded once; editing later corrects it.'}
+      submitLabel={pending ? 'Saving…' : staged ? 'Retry saving' : isCorrection ? 'Save changes' : 'Add time'} canSubmit={!pending && (staged || (valid && outcomeOk))} onSubmit={() => void save()}>
       {editable && !(isNew && goalId) && (
         <GoalSelect goals={goals} value={gid} disabled={frozen}
           onChange={(v) => { setGid(v); setLinkTask(NONE); setRows((s) => (v === session?.goalId ? s : [])); setMetricId(isCorrection ? NONE : timeMetrics(state.goals.find((g) => g.id === v))[0]?.id ?? NONE); }} />
@@ -327,6 +338,10 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
             <DurationInput seconds={seconds} onChange={setSeconds} disabled={frozen} label="Actual time" testId="log-duration" />
           </Field>
         </div>
+      )}
+      {short && session && (
+        <SessionOutcomeChoice actualMinutes={seconds / 60} plannedMinutes={session.plannedMinutes} value={outcome} onChange={setOutcome}
+          date={remainingDate} onDateChange={setRemainingDate} today={today} disabled={frozen} testId="log-outcome" />
       )}
       {editable && goal && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={frozen} testId="select-log-metric" />}
 
@@ -477,6 +492,7 @@ export function SessionEntryRow({ metric, entry }: { metric: Metric; entry: Metr
 /** One session row with its real actions. Dialogs are owned by the caller. */
 export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onPlan, onLog, onDelete }: { session: WorkSession; goal?: Goal; showGoal?: boolean; hideDate?: boolean; onPlan: (s: WorkSession) => void; onLog: (s: WorkSession) => void; onDelete: (s: WorkSession) => void }) {
   const actions = useWorkSessionActions();
+  const state = useAppState();
   const metric = g?.metrics.find((m) => m.id === s.metricId);
   const alloc = s.allocations.reduce((a, x) => a + x.minutes, 0);
   const status = s.status;
@@ -485,14 +501,20 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
   const isPlanned = !isLogged && !isSkipped;
   const d = (isLogged ? s.date : s.plannedDate) ?? '';
   const missed = isPlanned && !!d && d < todayIso();
-  const statusText = isLogged ? 'Done' : isSkipped ? 'Skipped' : missed ? 'Missed' : 'Planned';
+  const split = isLogged && !!s.remainderSessionId;
+  const remainderPiece = isPlanned && !!s.continuationOfId;
+  const statusText = isLogged ? (split ? 'Recorded' : 'Done') : isSkipped ? 'Skipped' : missed ? 'Missed' : remainderPiece ? 'Remaining' : 'Planned';
   const minutes = isLogged ? s.actualMinutes ?? 0 : s.plannedMinutes;
+  const origPlanned = s.originalPlannedMinutes ?? s.plannedMinutes;
+  const shortClosed = isLogged && origPlanned > 0 && (s.actualMinutes ?? 0) < origPlanned;
+  const remainder = split ? state.sessions?.find((x) => x.id === s.remainderSessionId) : undefined;
+  const parent = remainderPiece ? state.sessions?.find((x) => x.id === s.continuationOfId) : undefined;
   return (
     <li className={cn('grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-2.5', isSkipped && 'opacity-70')} data-testid={`row-session-${s.id}`}>
-      <div className={cn('flex flex-col items-center rounded-lg px-1 py-1 text-center', isLogged ? 'bg-primary/12 text-primary' : isSkipped ? 'bg-muted text-muted-foreground' : missed ? 'border border-destructive/40 text-destructive' : 'border border-dashed border-foreground/30 text-foreground')}>
+      <div className={cn('flex flex-col items-center rounded-lg px-1 py-1 text-center', isLogged ? 'bg-success/10 text-success' : isSkipped ? 'bg-muted text-muted-foreground' : missed ? 'border border-destructive/40 text-destructive' : 'border border-dashed border-foreground/30 text-foreground')}>
         <span className={cn('font-num text-sm leading-tight', isSkipped && 'line-through')} data-testid={isLogged ? `text-session-actual-${s.id}` : `text-session-minutes-${s.id}`}>{mins(minutes)}</span>
-        <span className="flex items-center gap-0.5 text-[0.65rem] leading-tight" data-testid={`status-session-${s.id}`}>
-          {isLogged ? <Timer className="size-2.5" aria-hidden /> : <Clock3 className="size-2.5" aria-hidden />}{statusText}
+        <span className="flex flex-wrap items-center justify-center gap-0.5 text-[0.65rem] leading-tight" data-testid={`status-session-${s.id}`}>
+          {isLogged ? <Check className="size-2.5" aria-hidden /> : <Clock3 className="size-2.5" aria-hidden />}{statusText}
         </span>
       </div>
       <div className="min-w-0">
@@ -505,9 +527,22 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
           {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
           {isPlanned && <span>{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} task${s.taskIds.length > 1 ? 's' : ''}` : ''}</span>}
           {isSkipped && <span>No time credited</span>}
+          {shortClosed && <span className="font-num" data-testid={`text-session-compare-${s.id}`}>{mins(s.actualMinutes ?? 0)} of {mins(origPlanned)} planned</span>}
           {isLogged && s.allocations.length > 0 && <span className="font-num" data-testid={`text-session-unallocated-${s.id}`}>{mins((s.actualMinutes ?? 0) - alloc)} unallocated</span>}
           {!isSkipped && <span>{metric ? `Counts to ${metric.name}` : 'Time only'}</span>}
         </div>
+        {split && (
+          <p className="mt-1 flex min-w-0 items-start gap-1 break-words text-xs text-muted-foreground" data-testid={`text-session-remainder-${s.id}`}>
+            <CornerDownRight className="mt-0.5 size-3 shrink-0" aria-hidden />
+            <span>{remainder ? (remainder.status === 'logged' ? `${mins(remainder.actualMinutes ?? 0)} was recorded in the follow-up session.` : remainder.status === 'skipped' ? 'The follow-up session was skipped. No extra time was credited.' : `${mins(remainder.plannedMinutes)} remains planned${remainder.plannedDate ? ` for ${relDay(remainder.plannedDate).toLowerCase()}` : ''}.`) : 'The remaining time was planned as a separate session.'}</span>
+          </p>
+        )}
+        {remainderPiece && (
+          <p className="mt-1 flex min-w-0 items-start gap-1 break-words text-xs text-muted-foreground" data-testid={`text-session-continuation-${s.id}`}>
+            <CornerDownRight className="mt-0.5 size-3 shrink-0" aria-hidden />
+            <span>Remaining time from {parent ? `${mins(parent.actualMinutes ?? 0)} recorded${parent.date ? ` ${relDay(parent.date).toLowerCase()}` : ''}` : 'an earlier session'}.</span>
+          </p>
+        )}
         {isLogged && <div className="min-w-0 overflow-hidden break-words"><WorkDonePreview items={sessionWorkDone(s).all} testId={s.id} /></div>}
       </div>
       <div className="col-start-2 -ml-2 flex flex-wrap items-center gap-0.5">

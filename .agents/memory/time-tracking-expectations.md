@@ -32,3 +32,9 @@ Save client timesheets as historical copies rather than live views of current ti
 **Why:** Time corrections or later work should not silently change a statement already sent to a client; editing a report must not rewrite actual work or goal progress.
 
 **How to apply:** Keep saved reports independently editable and require explicit deletion of their payment history before deleting the associated goal.
+
+Recording less than planned must not imply that the person finished their intended work. Ask whether to continue later, finish the session, or replan the remaining time.
+
+**Why:** The user reported that a 30-minute log against a one-hour session misleadingly appeared done, and approved these three choices for both manual logging and timers.
+
+**How to apply:** Credit actual time only. Keep unfinished time as a linked, nonrecurring plan so it remains actionable without duplicating time or the next regular occurrence. Later corrections change historical actual work, not the separate remaining plan; say so in the correction UI. Done/recorded states should look calm and successful, not error-red.

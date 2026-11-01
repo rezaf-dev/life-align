@@ -130,7 +130,7 @@ export function DayAgenda({ day }: { day: string }) {
                 )}
                 {doneSessions.length > 0 && (
                   <>
-                    <SubHead label="Done sessions" count={doneSessions.length} detail={`${formatMinutes(logged)} logged`} testId="text-done-sessions" />
+                    <SubHead label={doneSessions.some((x) => x.remainderSessionId) ? 'Recorded sessions' : 'Done sessions'} count={doneSessions.length} detail={`${formatMinutes(logged)} logged`} testId="text-done-sessions" />
                     <ul className="divide-y divide-border/60">{doneSessions.map((s) => row(s))}</ul>
                   </>
                 )}
