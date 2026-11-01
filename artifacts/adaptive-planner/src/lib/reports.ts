@@ -52,7 +52,7 @@ export function buildGoalReport(state: AppState, goal: Goal, start: string, end:
   return {
     start, end, goalId: goal.id, goalTitle: goal.title,
     actualMinutes: sum(logged, (s) => s.actualMinutes ?? 0),
-    plannedMinutes: sum(sessions.filter((s) => within(s.plannedDate, start, end)), (s) => s.plannedMinutes),
+    plannedMinutes: sum(sessions.filter((s) => s.status !== 'skipped' && within(s.plannedDate, start, end)), (s) => s.plannedMinutes),
     sessionCount: logged.length,
     completedTasks: state.tasks.filter((t) => t.goalId === goal.id && t.status === 'done' && within(t.completedAt, start, end))
       .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')),

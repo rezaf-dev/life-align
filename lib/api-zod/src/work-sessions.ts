@@ -10,7 +10,8 @@ export const workSessionSchema = z.object({
   plannedMinutes: z.number().int().min(0).max(1440),
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   taskIds: z.array(z.string()).max(100),
-  notes: z.string(), status: z.enum(['planned', 'logged']),
+  notes: z.string(), status: z.enum(['planned', 'logged', 'skipped']),
+  skippedAt: z.string().optional(),
   workDone: workDoneListSchema.optional(),
   date: date.optional(), actualMinutes: z.number().finite().positive().max(1500).optional(),
   allocations: z.array(z.object({
@@ -22,7 +23,8 @@ export const workSessionSchema = z.object({
   sourceTimerId: z.string().optional(),
 }).superRefine((s, ctx) => {
   if (s.status === 'logged' && (!s.date || !s.actualMinutes)) ctx.addIssue({ code: 'custom', message: 'Logged sessions need an actual date and duration.' });
-  if (s.status === 'planned' && (s.actualMinutes !== undefined || s.allocations.length)) ctx.addIssue({ code: 'custom', message: 'Planned time is not actual work.' });
+  if (s.status !== 'logged' && (s.actualMinutes !== undefined || s.allocations.length)) ctx.addIssue({ code: 'custom', message: 'Unlogged time is not actual work.' });
+  if (s.status === 'skipped' && !s.skippedAt) ctx.addIssue({ code: 'custom', message: 'Skipped sessions need a skip date.' });
   if (s.allocations.reduce((sum, row) => sum + row.minutes, 0) - (s.actualMinutes ?? 0) > 1e-8) ctx.addIssue({ code: 'custom', message: 'Task time cannot exceed the session duration.' });
   if (new Set(s.allocations.map((a) => a.taskId)).size !== s.allocations.length) ctx.addIssue({ code: 'custom', message: 'Allocate time to each task once per session.' });
 });
@@ -60,7 +62,7 @@ export function plannedWorkMinutes(
     sessions?: WorkSession[];
   }, start: string, end: string,
 ) {
-  const sessions = (state.sessions ?? []).filter((s) => s.plannedDate && s.plannedDate >= start && s.plannedDate <= end);
+  const sessions = (state.sessions ?? []).filter((s) => s.status !== 'skipped' && s.plannedDate && s.plannedDate >= start && s.plannedDate <= end);
   const covered = new Set(sessions.flatMap((s) => s.taskIds.filter((id) => state.tasks.some((t) => t.id === id && t.goalId === s.goalId))));
   return sessions.reduce((sum, s) => sum + s.plannedMinutes, 0)
     + state.tasks.filter((t) => !t.archived && t.plannedDate && t.plannedDate >= start && t.plannedDate <= end && !covered.has(t.id))

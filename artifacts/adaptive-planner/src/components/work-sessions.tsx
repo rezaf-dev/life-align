@@ -478,44 +478,50 @@ export function SessionEntryRow({ metric, entry }: { metric: Metric; entry: Metr
 export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onPlan, onLog, onDelete }: { session: WorkSession; goal?: Goal; showGoal?: boolean; hideDate?: boolean; onPlan: (s: WorkSession) => void; onLog: (s: WorkSession) => void; onDelete: (s: WorkSession) => void }) {
   const actions = useWorkSessionActions();
   const metric = g?.metrics.find((m) => m.id === s.metricId);
-            const alloc = s.allocations.reduce((a, x) => a + x.minutes, 0);
-            const d = (s.status === 'logged' ? s.date : s.plannedDate) ?? '';
-            return (
-              <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-x-2 gap-y-1 py-2" data-testid={`row-session-${s.id}`}>
-                <span className={cn('mt-1 grid size-7 shrink-0 place-items-center rounded-full', s.status === 'logged' ? 'bg-primary/15 text-primary' : 'border border-dashed border-foreground/30 text-muted-foreground')}>
-                  {s.status === 'logged' ? <Timer className="size-3.5" /> : <Clock3 className="size-3.5" />}
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-[0.93rem] leading-snug">
-                    <span className="min-w-0 break-words" data-testid={`text-session-title-${s.id}`}>{s.title}</span>
-                    {s.recurrence !== 'none' && <Repeat className="size-3 shrink-0 text-muted-foreground" aria-label={`Repeats ${s.recurrence}`} />}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-                    {showGoal && g && <span className="inline-flex min-w-0 max-w-[10rem] items-center gap-1.5"><AreaDot area={g.area} /><span className="truncate">{g.title}</span></span>}
-                    {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
-                    {s.status === 'planned' ? <span className="font-num">{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} tasks` : ''}</span> : (
-                      <>
-                        <span className="font-num text-foreground" data-testid={`text-session-actual-${s.id}`}>{mins(s.actualMinutes ?? 0)} actual</span>
-                        {s.allocations.length > 0 && <span className="font-num" data-testid={`text-session-unallocated-${s.id}`}>{mins((s.actualMinutes ?? 0) - alloc)} unallocated</span>}
-                      </>
-                    )}
-                    <span>{metric ? `to ${metric.name}` : 'time only'}</span>
-                  </div>
-                  {s.status === 'logged' && <WorkDonePreview items={sessionWorkDone(s).all} testId={s.id} />}
-                </div>
-                <div className="col-start-2 flex flex-wrap items-center justify-self-end">
-                  {s.status === 'planned' ? (
-                    <>
-                      <Button variant="ghost" size="icon" className="size-9 text-primary" aria-label={`Start timer for ${s.title}`} onClick={() => actions.start({ sessionId: s.id, goalId: s.goalId })} data-testid={`button-start-timer-${s.id}`}><Play /></Button>
-                      <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" onClick={() => onLog(s)} data-testid={`button-log-session-${s.id}`}>Log time</Button>
-                      <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Edit ${s.title}`} onClick={() => onPlan(s)} data-testid={`button-edit-session-${s.id}`}><Pencil /></Button>
-                    </>
-                  ) : (
-                    <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Correct time and work details for ${s.title}`} onClick={() => onLog(s)} data-testid={`button-edit-log-${s.id}`}><Pencil /></Button>
-                  )}
-                  <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Delete ${s.title}`} onClick={() => onDelete(s)} data-testid={`button-delete-session-${s.id}`}><Trash2 /></Button>
-                </div>
-              </li>
+  const alloc = s.allocations.reduce((a, x) => a + x.minutes, 0);
+  const status = s.status;
+  const isLogged = status === 'logged';
+  const isSkipped = status === 'skipped';
+  const isPlanned = !isLogged && !isSkipped;
+  const d = (isLogged ? s.date : s.plannedDate) ?? '';
+  const missed = isPlanned && !!d && d < todayIso();
+  const statusText = isLogged ? 'Done' : isSkipped ? 'Skipped' : missed ? 'Missed' : 'Planned';
+  const minutes = isLogged ? s.actualMinutes ?? 0 : s.plannedMinutes;
+  return (
+    <li className={cn('grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-2.5', isSkipped && 'opacity-70')} data-testid={`row-session-${s.id}`}>
+      <div className={cn('flex flex-col items-center rounded-lg px-1 py-1 text-center', isLogged ? 'bg-primary/12 text-primary' : isSkipped ? 'bg-muted text-muted-foreground' : missed ? 'border border-destructive/40 text-destructive' : 'border border-dashed border-foreground/30 text-foreground')}>
+        <span className={cn('font-num text-sm leading-tight', isSkipped && 'line-through')} data-testid={isLogged ? `text-session-actual-${s.id}` : `text-session-minutes-${s.id}`}>{mins(minutes)}</span>
+        <span className="flex items-center gap-0.5 text-[0.65rem] leading-tight" data-testid={`status-session-${s.id}`}>
+          {isLogged ? <Timer className="size-2.5" aria-hidden /> : <Clock3 className="size-2.5" aria-hidden />}{statusText}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-start gap-1.5 text-[0.93rem] leading-snug">
+          <span className={cn('min-w-0 break-words', isSkipped && 'line-through decoration-muted-foreground/60')} data-testid={`text-session-title-${s.id}`}>{s.title}</span>
+          {s.recurrence !== 'none' && <Repeat className="mt-1 size-3 shrink-0 text-muted-foreground" aria-label={`Repeats ${s.recurrence}`} />}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
+          {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>No goal</span>)}
+          {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
+          {isPlanned && <span>{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} task${s.taskIds.length > 1 ? 's' : ''}` : ''}</span>}
+          {isSkipped && <span>No time credited</span>}
+          {isLogged && s.allocations.length > 0 && <span className="font-num" data-testid={`text-session-unallocated-${s.id}`}>{mins((s.actualMinutes ?? 0) - alloc)} unallocated</span>}
+          {!isSkipped && <span>{metric ? `Counts to ${metric.name}` : 'Time only'}</span>}
+        </div>
+        {isLogged && <div className="min-w-0 overflow-hidden break-words"><WorkDonePreview items={sessionWorkDone(s).all} testId={s.id} /></div>}
+      </div>
+      <div className="col-start-2 -ml-2 flex flex-wrap items-center gap-0.5">
+        {isPlanned && (
+          <>
+            <Button variant="ghost" size="sm" className="h-9 px-2 text-xs text-primary" aria-label={`Start timer for ${s.title}`} onClick={() => actions.start({ sessionId: s.id, goalId: s.goalId })} data-testid={`button-start-timer-${s.id}`}><Play /> Start</Button>
+            <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" aria-label={`Log time for ${s.title}`} onClick={() => onLog(s)} data-testid={`button-log-session-${s.id}`}>Log time</Button>
+            <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Edit ${s.title}`} onClick={() => onPlan(s)} data-testid={`button-edit-session-${s.id}`}><Pencil /></Button>
+          </>
+        )}
+        {isLogged && <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Correct time and work details for ${s.title}`} onClick={() => onLog(s)} data-testid={`button-edit-log-${s.id}`}><Pencil /></Button>}
+        <Button variant="ghost" size="icon" className="size-9 text-muted-foreground" aria-label={`Delete ${s.title}`} onClick={() => onDelete(s)} data-testid={`button-delete-session-${s.id}`}><Trash2 /></Button>
+      </div>
+    </li>
   );
 }
 
@@ -528,11 +534,12 @@ export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Wo
   const [dialog, setDialog] = useState<DialogState>(null);
   const actions = useWorkSessionActions();
   const goalById = new Map(state.goals.map((g) => [g.id, g]));
+  const rank = (s: WorkSession) => (s.status === 'planned' ? 0 : s.status === 'logged' ? 1 : 2);
   const when = (s: WorkSession) => (s.status === 'logged' ? s.date : s.plannedDate) ?? '';
   const inRange = (d?: string) => !!d && (!start || d >= start) && (!end || d <= end);
   const list = sessions
     .filter((s) => (!goalId || s.goalId === goalId) && (goalId || (!start && !end) || inRange(s.plannedDate) || inRange(s.date)) && (!filter || filter(s)))
-    .sort((a, b) => (a.status === b.status ? when(a).localeCompare(when(b)) : a.status === 'planned' ? -1 : 1));
+    .sort((a, b) => (a.status === b.status ? when(a).localeCompare(when(b)) : rank(a) - rank(b)));
   const planned = list.filter((s) => s.status === 'planned');
   const logged = list.filter((s) => s.status === 'logged');
   const close = () => setDialog(null);
@@ -546,8 +553,8 @@ export function WorkSessionsPanel({ goalId, start, end, defaultDate, title = 'Wo
           {mins(planned.reduce((a, s) => a + s.plannedMinutes, 0))} reserved · {mins(logged.reduce((a, s) => a + (s.actualMinutes ?? 0), 0))} logged
         </span>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">Reserve time, time it live, or add time you already spent. Recording time never completes a task.</p>
-      <div className="mb-3 grid grid-cols-3 gap-2">
+      <p className="mb-3 text-xs text-muted-foreground">Plan a session, start a timer, or record work. Tasks stay open until you complete them.</p>
+      <div className="mb-3 flex flex-wrap gap-2">
         <Button size="sm" className="h-10 px-2 sm:h-9" onClick={() => actions.start({ goalId })} data-testid="button-start-timer"><Play /> Start timer</Button>
         <Button size="sm" variant="secondary" className="h-10 px-2 sm:h-9" onClick={() => setDialog({ log: true })} data-testid="button-log-work"><Plus /> Add time</Button>
         <Button variant="outline" size="sm" className="h-10 px-2 sm:h-9" onClick={() => setDialog({ plan: true })} data-testid="button-plan-session"><Clock3 /> Plan</Button>

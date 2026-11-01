@@ -1,12 +1,10 @@
 import { measurementTargetAt, plannedWorkMinutes } from '@workspace/api-zod';
 import { DayAgenda } from '@/components/day-agenda';
-import { dayAgenda } from '@/lib/day-agenda';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { ArrowRight, Bell, Check, ChevronDown, Flag, Info, LineChart, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, Flag, Info, LineChart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { TaskRow } from '@/components/task-row';
+import { MissedWork } from '@/components/missed-work';
 import { useTaskCompletion } from '@/components/task-completion';
 import { LogMetricDialog } from '@/components/goal-dialogs';
 import { AreaDot, EmptyState, HealthPill, PaceBar } from '@/components/primitives';
@@ -19,7 +17,6 @@ import {
   goalExecution,
   goalHealth,
   metricValueAt,
-  overdueTasks,
   tasksInRange,
 } from '@/lib/store/selectors';
 import { isRecurring } from '@/components/measurement-period';
@@ -36,59 +33,14 @@ function greeting() {
   return 'Good evening';
 }
 
-/** Accessible disclosure used for secondary lists on this page. */
-function Disclosure({
-  label,
-  count,
-  tone,
-  defaultOpen = false,
-  action,
-  children,
-  testId,
-}: {
-  label: string;
-  count: number;
-  tone?: 'warn';
-  defaultOpen?: boolean;
-  action?: ReactNode;
-  children: ReactNode;
-  testId?: string;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="mt-3 border-t border-border/70 pt-2">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className={cn(
-            'inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8',
-            tone === 'warn' ? 'text-destructive' : 'text-muted-foreground',
-          )}
-          data-testid={testId}
-        >
-          <ChevronDown className={cn('size-4 transition-transform', !open && '-rotate-90')} />
-          {label} <span className="font-num text-xs">{count}</span>
-        </button>
-        {action}
-      </div>
-      {open && <div className="mt-1 divide-y divide-border/60">{children}</div>}
-    </div>
-  );
-}
-
 export default function OverviewPage() {
   const state = useAppState();
-  const { toast } = useToast();
   const completion = useTaskCompletion();
   const today = todayIso();
   const ws = weekStartIso(today);
   const [logGoal, setLogGoal] = useState<Goal | null>(null);
 
   const data = useMemo(() => {
-    const remainingIds = new Set(dayAgenda(state, today).remainingTasks.map((t) => t.id));
-    const overdue = overdueTasks(state.tasks, today).filter((t) => !remainingIds.has(t.id));
     const reminders = dueReminders(state.tasks, nowStamp());
     const active = state.goals.filter((g) => g.status === 'active');
     const weekTasks = tasksInRange(state.tasks, ws, addDaysIso(ws, 6));
@@ -100,7 +52,7 @@ export default function OverviewPage() {
       .slice(0, 4);
     const insights = generateInsights(state, today).slice(0, 4);
     const lastWeekly = state.reviews.find((r) => r.type === 'weekly');
-    return { overdue, reminders, active, weekTasks, plan, effort, milestones, insights, lastWeekly };
+    return { reminders, active, weekTasks, plan, effort, milestones, insights, lastWeekly };
   }, [state, today, ws]);
 
   const weekDone = data.weekTasks.filter((t) => t.status === 'done').length;
@@ -115,11 +67,7 @@ export default function OverviewPage() {
       ? { href: '/planner?view=week', label: 'Plan this week', test: 'button-plan-week' }
       : null;
 
-  const summary = [
-    data.overdue.length ? `${data.overdue.length} carried over` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const summary = data.reminders.length ? `${data.reminders.length} reminder${data.reminders.length > 1 ? 's' : ''} due` : '';
 
   return (
     <div>
@@ -176,37 +124,9 @@ export default function OverviewPage() {
             </ul>
           )}
 
-          <DayAgenda day={today} />
+          <MissedWork className="mb-4" />
 
-          {data.overdue.length > 0 && (
-            <Disclosure
-              label="Carried over"
-              count={data.overdue.length}
-              tone="warn"
-              testId="button-toggle-overdue"
-              action={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-10 text-xs sm:h-8"
-                  onClick={() => {
-                    rescheduleTasks(data.overdue.map((t) => t.id), today);
-                    toast({ title: `${data.overdue.length} moved to today`, description: 'Saved week plans keep their original dates.' });
-                  }}
-                  data-testid="button-move-overdue-today"
-                >
-                  Move all to today
-                </Button>
-              }
-            >
-              {data.overdue.slice(0, 8).map((t) => <TaskRow key={t.id} task={t} siblings={data.overdue.slice(0, 8)} />)}
-              {data.overdue.length > 8 && (
-                <Link href="/tasks?view=overdue" className="block px-2 py-2 text-xs text-primary hover:underline">
-                  See all {data.overdue.length} overdue
-                </Link>
-              )}
-            </Disclosure>
-          )}
+          <DayAgenda day={today} />
 
           <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-border px-1 pt-4 text-sm">
             <div className="col-span-3 sm:col-span-1">
@@ -297,6 +217,17 @@ export default function OverviewPage() {
                   <li key={i.id} className="flex gap-3" data-testid={`insight-${i.id}`}>
                     <span aria-hidden className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', i.tone === 'warning' ? 'bg-destructive' : i.tone === 'positive' ? 'bg-success' : 'bg-warning')} />
                     <div className="min-w-0 text-sm">
+                      {(() => {
+                        const goal = i.goalId ? state.goals.find((g) => g.id === i.goalId) : undefined;
+                        const name = i.goalTitle ?? goal?.title;
+                        if (!name) return null;
+                        return (
+                          <span className="mb-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" data-testid={`text-insight-goal-${i.id}`}>
+                            {goal && <AreaDot area={goal.area} />}
+                            {i.goalId ? <Link href={`/goals/${i.goalId}`} className="break-words font-medium text-foreground/80 hover:text-primary">{name}</Link> : <span className="break-words">{name}</span>}
+                          </span>
+                        );
+                      })()}
                       {i.href ? <Link href={i.href} className="font-medium hover:text-primary">{i.title}</Link> : <span className="font-medium">{i.title}</span>}
                       <p className="text-muted-foreground">{i.detail}</p>
                     </div>

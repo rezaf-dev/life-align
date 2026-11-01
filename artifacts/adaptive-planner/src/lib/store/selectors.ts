@@ -51,6 +51,7 @@ export const isOpen = (t: Task) => t.status === 'open' && !t.archived;
 
 export function isOverdue(t: Task, today = todayIso()) {
   if (!isOpen(t)) return false;
+  if (t.plannedDate && t.plannedDate >= today) return false;
   return (!!t.dueDate && t.dueDate < today) || (!!t.plannedDate && t.plannedDate < today);
 }
 

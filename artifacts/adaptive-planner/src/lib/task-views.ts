@@ -23,6 +23,7 @@ export function rememberTaskView(userId: string | undefined, view: TaskView) {
 }
 
 export function sessionMatchesTaskView(session: WorkSession, view: TaskView, today: string): boolean {
+  if (session.status === 'skipped') return view === 'archived';
   const planned = session.status === 'planned';
   switch (view) {
     case 'inbox': return planned && !session.plannedDate;

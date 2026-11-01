@@ -188,7 +188,8 @@ function TaskRowInner({
           <span className="truncate">{goal.title}</span>
         </span>,
       );
-    if (task.dueDate && !done)
+    if (task.skippedAt) meta.push(<span key="skipped" className="text-muted-foreground">Skipped · not completed</span>);
+    if (task.dueDate && !done && !task.skippedAt)
       meta.push(<span key="d" className={cn('font-num', task.dueDate < today && 'text-destructive')}>due {relDay(task.dueDate).toLowerCase()}</span>);
     if (task.effort > 0 && !done) meta.push(<span key="e" className="font-num">{effortLabel(task.effort)}</span>);
     if (goal?.metrics.length) meta.push(<ContributionChips key="r" goal={goal} filter={{ taskId: task.id }} testId={`text-task-result-${task.id}`} />);

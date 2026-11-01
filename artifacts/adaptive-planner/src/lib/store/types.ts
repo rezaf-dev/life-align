@@ -108,6 +108,7 @@ export interface Task {
   status: 'open' | 'done';
   completedAt?: string;
   archived: boolean;
+  skippedAt?: string;
   createdAt: string;
   spawnedNextId?: string;
   isDemo: boolean;

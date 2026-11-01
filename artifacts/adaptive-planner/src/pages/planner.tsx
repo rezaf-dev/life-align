@@ -21,7 +21,7 @@ import {
   weekStartIso,
 } from '@/lib/dates';
 import { finalizeWeek, rescheduleTasks, reopenWeek, setPeriodNote, setWeekPlan } from '@/lib/store/actions';
-import { dueReminders, effortLabel, inboxTasks, overdueTasks, plannedOn, tasksInRange, weekRange } from '@/lib/store/selectors';
+import { dueReminders, effortLabel, inboxTasks, plannedOn, tasksInRange, weekRange } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
 import { cn } from '@/lib/utils';
 import { plannedWorkMinutes } from '@workspace/api-zod';
@@ -29,7 +29,7 @@ import { WorkSessionsPanel } from '@/components/work-sessions';
 import { AskButton } from '@/components/ai/ask-button';
 import { useAccess } from '@/components/auth/access-provider';
 import { DayAgenda } from '@/components/day-agenda';
-import { dayAgenda } from '@/lib/day-agenda';
+import { MissedWork } from '@/components/missed-work';
 import { readPlannerView, rememberPlannerView, resolvePlannerView, type PlannerView } from '@/lib/planner-views';
 
 type View = PlannerView;
@@ -140,6 +140,8 @@ export default function PlannerPage() {
           </div>
         </div>
       </div>
+
+      <MissedWork className="rise mb-5" />
 
       {view === 'year' && <YearView anchor={anchor} onDrill={drill} />}
       {view === 'quarter' && <QuarterView anchor={anchor} onDrill={drill} />}
@@ -385,7 +387,7 @@ function DayBlock({ day, today, onDrill }: { day: string; today: string; onDrill
   const [showDone, setShowDone] = useState(false);
   const [expandPast, setExpandPast] = useState(false);
   const dayEffort = plannedWorkMinutes(state, day, day);
-  const daySessions = (state.sessions ?? []).filter((x) => x.plannedDate === day).length;
+  const daySessions = (state.sessions ?? []).filter((x) => x.status !== 'skipped' && (x.status === 'logged' ? x.date : x.plannedDate) === day).length;
   const collapsedPast = past && !expandPast;
   return (
     <section
@@ -551,8 +553,6 @@ function DayView({ day }: { day: string }) {
   const state = useAppState();
   const { tasks } = state;
   const today = todayIso();
-  const agenda = dayAgenda(state, day);
-  const overdue = day === today ? overdueTasks(tasks).filter((t) => !agenda.remainingTasks.some((item) => item.id === t.id)) : [];
   const reminders = day === today ? dueReminders(tasks, nowStamp()) : [];
   const ws = weekStartIso(day);
   return (
@@ -562,12 +562,6 @@ function DayView({ day }: { day: string }) {
           <h2 id="day-plan-heading" className="mb-3 font-display text-xl">{fmt(day, 'EEEE, MMMM d')}</h2>
           <DayAgenda key={day} day={day} />
         </section>
-        {overdue.length > 0 && (
-          <details className="surface rise p-5">
-            <summary className="cursor-pointer text-sm font-medium text-destructive">Carried over · {overdue.length}</summary>
-            <div className="mt-2 divide-y divide-border/60">{overdue.map((t) => <TaskRow key={t.id} task={t} siblings={overdue} />)}</div>
-          </details>
-        )}
         {reminders.length > 0 && (
           <div className="surface rise p-5">
             <div className="mb-2 text-sm font-medium" title="In-app only. Align has no background notification service.">Reminders due</div>

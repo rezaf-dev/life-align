@@ -46,8 +46,8 @@ export function DayAgenda({ day }: { day: string }) {
   const goalById = useMemo(() => new Map(state.goals.map((g) => [g.id, g])), [state.goals]);
   const { remainingTasks, doneTasks, remainingSessions, doneSessions } = agenda;
   const hasGoals = state.goals.length > 0;
-  const reserved = remainingSessions.reduce((a, s) => a + s.plannedMinutes, 0);
-  const logged = doneSessions.reduce((a, s) => a + (s.actualMinutes ?? 0), 0);
+  const reserved = remainingSessions.filter((s) => s.status === 'planned').reduce((a, s) => a + s.plannedMinutes, 0);
+  const logged = doneSessions.filter((s) => s.status === 'logged').reduce((a, s) => a + (s.actualMinutes ?? 0), 0);
   const remainingCount = remainingTasks.length + remainingSessions.length;
   const doneCount = doneTasks.length + doneSessions.length;
   const isPastOrToday = day <= todayIso();
@@ -105,7 +105,7 @@ export function DayAgenda({ day }: { day: string }) {
         </Group>
 
         {doneCount > 0 && (
-          <section aria-labelledby="agenda-done" className="min-w-0 rounded-lg bg-muted/40 px-1 py-1.5">
+          <section aria-labelledby="agenda-done" className="min-w-0 overflow-hidden rounded-lg bg-muted/40 px-1 py-1.5">
             <h3 id="agenda-done">
               <button
                 type="button"
@@ -119,7 +119,7 @@ export function DayAgenda({ day }: { day: string }) {
               </button>
             </h3>
             {showDone && (
-              <div className="opacity-90">
+              <div className="min-w-0 overflow-hidden break-words">
                 {doneTasks.length > 0 && (
                   <>
                     <SubHead label="Completed tasks" count={doneTasks.length} testId="text-done-tasks" />
@@ -130,7 +130,7 @@ export function DayAgenda({ day }: { day: string }) {
                 )}
                 {doneSessions.length > 0 && (
                   <>
-                    <SubHead label="Logged sessions" count={doneSessions.length} detail={`${formatMinutes(logged)} logged`} testId="text-done-sessions" />
+                    <SubHead label="Done sessions" count={doneSessions.length} detail={`${formatMinutes(logged)} logged`} testId="text-done-sessions" />
                     <ul className="divide-y divide-border/60">{doneSessions.map((s) => row(s))}</ul>
                   </>
                 )}

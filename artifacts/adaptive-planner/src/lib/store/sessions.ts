@@ -36,6 +36,7 @@ export function saveWorkSession(input: SessionDraft, id?: string): string {
     validateDraft(state, input);
     const existing = id ? state.sessions?.find((s) => s.id === id) : undefined;
     if (id && !existing) throw new Error('This session no longer exists.');
+    if (existing?.status === 'skipped') throw new Error('Skipped sessions are kept as history. Plan a new session instead.');
     if (existing?.status === 'logged') throw new Error('Use Edit time to correct a logged session.');
     const next = buildSession(input);
     if (existing) Object.assign(existing, next, { id: existing.id, createdAt: existing.createdAt, sourceTaskId: existing.sourceTaskId });
@@ -87,6 +88,7 @@ export function logWorkSession(id: string, input: SessionResult) {
 export function logWorkSessionInDraft(state: AppState, id: string, input: SessionResult) {
     const session = state.sessions?.find((s) => s.id === id);
     if (!session) throw new Error('This session no longer exists.');
+    if (session.status === 'skipped') throw new Error('Skipped sessions cannot record work. Add a new time entry instead.');
     if (input.date > (input.allowedThroughDate ?? todayIso())) throw new Error('Record actual work today or earlier.');
     const previousAllocations = session.allocations;
     const newAllocations = (input.newTasks ?? []).map((item) => {

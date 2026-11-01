@@ -141,7 +141,7 @@ export function rescheduleTasks(ids: string[], date: string | undefined) {
 }
 
 export function archiveTask(id: string, archived = true) {
-  updateTask(id, { archived });
+  updateTask(id, archived ? { archived } : { archived, skippedAt: undefined });
 }
 
 export function deleteTask(id: string) {

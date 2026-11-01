@@ -44,7 +44,7 @@ const task = z.object({
   plannedDate: text.optional(), dueDate: text.optional(), priority, effort: z.number().min(0),
   notes: text, recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   reminder: text.optional(), status: z.enum(['open', 'done']), completedAt: text.optional(),
-  archived: z.boolean(), createdAt: text, isDemo: z.boolean(),
+  archived: z.boolean(), skippedAt: text.optional(), createdAt: text, isDemo: z.boolean(),
 }).passthrough();
 const commitment = z.object({
   taskId: id, title: text, goalId: text.optional(), plannedDate: text.optional(), effort: z.number(),

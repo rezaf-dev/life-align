@@ -20,6 +20,8 @@ export interface Insight {
   title: string;
   detail: string;
   href?: string;
+  goalId?: string;
+  goalTitle?: string;
   rule: string;
 }
 
@@ -54,6 +56,7 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
       const period = measurementPeriod(m, today);
       out.push({
         id: `pace-${g.id}`,
+        goalId: g.id, goalTitle: g.title,
         tone: health.status === 'behind' ? 'warning' : 'notice',
         title: `${m.name} is behind linear pace`,
         detail: `${formatValue(metricValueAt(m, today), m.unit)} now; a straight line to ${formatValue(target, m.unit)} by ${fmt(period?.end ?? g.targetDate)} would be about ${formatValue(Math.round(expectedValue * 10) / 10, m.unit)} today.`,
@@ -66,6 +69,7 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
     if (!plannedThisWeek) {
       out.push({
         id: `noplan-${g.id}`,
+        goalId: g.id, goalTitle: g.title,
         tone: 'notice',
         title: `Nothing planned this week for "${g.title}"`,
         detail: 'An active goal with no scheduled action. Plan one step, or pause it on purpose.',
@@ -79,6 +83,7 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
     if (doneRecent >= 3 && (!lastLog || daysBetween(lastLog, today) > 10)) {
       out.push({
         id: `nolog-${g.id}`,
+        goalId: g.id, goalTitle: g.title,
         tone: 'notice',
         title: `Activity without a measured result on "${g.title}"`,
         detail: `${doneRecent} actions completed in 14 days, but no result logged for ${lastLog ? daysBetween(lastLog, today) + ' days' : 'this goal yet'}. Completing tasks does not move the metric by itself.`,
@@ -92,6 +97,7 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
       .forEach((m) =>
         out.push({
           id: `ms-${m.id}`,
+          goalId: g.id, goalTitle: g.title,
           tone: 'warning',
           title: `Milestone passed: ${m.title}`,
           detail: `Was due ${fmt(m.dueDate)}. Mark it reached, or reschedule with a reason.`,
