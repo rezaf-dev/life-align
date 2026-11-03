@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isMeasurementDate } from './measurements';
 
 export const activeWorkTimerSchema = z.object({
-  id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string().min(1),
+  id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string(),
   metricId: z.string().optional(), taskId: z.string().optional(), sessionId: z.string().optional(),
   timezone: z.string().refine((zone) => { try { new Intl.DateTimeFormat('en', { timeZone: zone }); return true; } catch { return false; } }, 'Choose a valid time zone.'),
   status: z.enum(['running', 'paused']),
@@ -57,9 +57,10 @@ export function timeTrackingDate(timezone: string, nowMs = Date.now()) {
   return localDate(dateFormatter(timezone), Math.floor(nowMs / 1000));
 }
 /** Split at real local midnights, including 23/25-hour DST days, without losing seconds. */
-function splitSegments(segments: { start: string; end?: string }[], timezone: string): { date: string; seconds: number }[] {
+function splitSegments(segments: { start: string; end?: string }[], timezone: string) {
   const formatter = dateFormatter(timezone);
   const days = new Map<string, number>();
+  const intervals = new Map<string, { start: string; end: string }[]>();
   for (const segment of segments) {
     if (!segment.end) throw new Error('Pause the timer before reviewing its work dates.');
     let cursor = Math.floor(Date.parse(segment.start) / 1000);
@@ -78,12 +79,18 @@ function splitSegments(segments: { start: string; end?: string }[], timezone: st
         boundary = lo;
       }
       days.set(date, (days.get(date) ?? 0) + boundary - cursor);
+      const list = intervals.get(date) ?? [];
+      list.push({ start: new Date(cursor * 1000).toISOString(), end: new Date(boundary * 1000).toISOString() });
+      intervals.set(date, list);
       cursor = boundary;
     }
   }
-  return [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, seconds]) => ({ date, seconds }));
+  return [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, seconds]) => ({ date, seconds, intervals: intervals.get(date)!, timezone }));
 }
 export function splitTimerDays(timer: ActiveWorkTimer) {
+  return splitSegments(timer.segments, timer.timezone).map(({ date, seconds }) => ({ date, seconds }));
+}
+export function splitTimerIntervals(timer: ActiveWorkTimer) {
   return splitSegments(timer.segments, timer.timezone);
 }
 function localTimestamp(value: string, timezone: string): string {

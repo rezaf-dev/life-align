@@ -87,7 +87,7 @@ export const stateSchema = z.object({
   if (state.activeTimer) {
     const goal = state.goals.find((g) => g.id === state.activeTimer!.goalId);
     const metric = goal?.metrics.find((m) => m.id === state.activeTimer!.metricId);
-    if (!goal || (state.activeTimer.metricId && (!metric || !timeUnitMinutes(metric.unit)))) {
+    if ((state.activeTimer.goalId && !goal) || (state.activeTimer.metricId && (!metric || !timeUnitMinutes(metric.unit)))) {
       ctx.addIssue({ code: 'custom', path: ['activeTimer'], message: 'A timer needs an existing goal and an optional time measure from that goal.' });
     }
   }

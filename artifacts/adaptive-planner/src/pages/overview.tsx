@@ -24,6 +24,7 @@ import { useAppState } from '@/lib/store/store';
 import type { Goal } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
+import { OverviewTimeCard } from '@/components/time-summary';
 
 function greeting() {
   const h = new Date().getHours();
@@ -206,6 +207,8 @@ export default function OverviewPage() {
               <p className="mt-1">The bar is the result you logged. The thin tick marks an even pace toward the target date, a reference point rather than a forecast. Completing tasks never changes a result.</p>
             </details>
           </section>
+
+          <OverviewTimeCard />
 
           <section className="surface rise p-4 sm:p-5" style={{ animationDelay: '140ms' }} aria-labelledby="signals-h">
             <h2 id="signals-h" className="mb-3 font-display text-xl">Needs attention</h2>

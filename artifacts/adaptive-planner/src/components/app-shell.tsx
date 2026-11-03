@@ -12,6 +12,7 @@ import {
   Settings2,
   Sun,
   Target,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -38,6 +39,7 @@ const NAV = [
   { href: '/goals', label: 'Goals', icon: Target, test: 'goals' },
   { href: '/planner', label: 'Planner', icon: CalendarRange, test: 'planner' },
   { href: '/tasks', label: 'Tasks & Inbox', icon: Inbox, test: 'tasks' },
+  { href: '/time', label: 'Time & performance', icon: Timer, test: 'time' },
   { href: '/reviews', label: 'Reviews', icon: NotebookPen, test: 'reviews' },
 ];
 

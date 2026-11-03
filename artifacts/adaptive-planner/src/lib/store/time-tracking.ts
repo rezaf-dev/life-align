@@ -1,11 +1,11 @@
-import { activeWorkTimerSchema, timeTrackingDate, timerWorkDoneForDays, workDoneListSchema, type ActiveWorkTimer } from '@workspace/api-zod';
+import { activeWorkTimerSchema, splitTimerIntervals, timeTrackingDate, timerWorkDoneForDays, workDoneListSchema, type ActiveWorkTimer } from '@workspace/api-zod';
 import { nowStamp, uid } from '@/lib/dates';
 import { update } from './store';
 import { applySessionOutcome, buildSession, logWorkSessionInDraft, validateDraft, type SessionDraft, type SessionResult } from './sessions';
 import type { AppState } from './types';
 
 export interface TimerStartInput { title: string; goalId: string; metricId?: string; taskId?: string; sessionId?: string }
-export interface WorkDayInput { date: string; actualMinutes: number; allocations: { taskId: string; minutes: number }[]; workDone?: string[] }
+export interface WorkDayInput { date: string; actualMinutes: number; allocations: { taskId: string; minutes: number }[]; workDone?: string[]; timeIntervals?: { start: string; end: string }[]; timezone?: string }
 export interface TimerSaveInput { title: string; goalId: string; metricId?: string; notes: string; days: WorkDayInput[]; workDoneSnapshot?: ActiveWorkTimer['workDone']; outcome?: SessionResult['outcome']; remainingDate?: string }
 export interface LoggedWorkEdit extends SessionResult { title: string; goalId: string; metricId?: string }
 const stamp = () => new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
@@ -127,12 +127,19 @@ export function saveWorkTimer(timerId: string, input: TimerSaveInput): string[] 
     const lastDate = input.days.map((d) => d.date).sort().at(-1)!;
     const original = state.sessions?.find((s) => s.id === timer.sessionId && s.goalId === input.goalId && s.status === 'planned');
     const workDone = timerWorkDoneForDays(timer, input.days.map((day) => day.date));
+    let clockDays: ReturnType<typeof splitTimerIntervals> = [];
+    try { clockDays = splitTimerIntervals(timer); }
+    catch { /* An invalid clock span may be replaced by explicit reviewed durations, without invented clock positions. */ }
     input.days.forEach((day, index) => {
+      const clock = input.days.filter((d) => d.date === day.date).length === 1
+        ? clockDays.find((d) => d.date === day.date && Math.abs(d.seconds - day.actualMinutes * 60) < 1e-6) : undefined;
       const session = index === 0 && original ? original : buildSession(base);
       if (session !== original) (state.sessions ??= []).push(session);
       session.title = input.title.trim(); session.metricId = input.metricId; session.notes = input.notes;
       session.sourceTimerId = timer.id;
       logWorkSessionInDraft(state, session.id, { ...day, workDone: day.workDone ?? workDone[index], notes: input.notes, recurrenceAfter: lastDate,
+        timeIntervals: clock?.intervals,
+        timezone: clock ? timer.timezone : undefined,
         allowedThroughDate: timeTrackingDate(timer.timezone) }, true);
       ids.push(session.id);
     });

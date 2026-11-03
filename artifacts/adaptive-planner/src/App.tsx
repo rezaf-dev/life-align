@@ -21,6 +21,7 @@ import GoalDetailPage from '@/pages/goal-detail';
 import PlannerPage from '@/pages/planner';
 import TasksPage from '@/pages/tasks';
 import ReviewsPage from '@/pages/reviews';
+import TimePage from '@/pages/time';
 import SettingsPage from '@/pages/settings';
 import AdminPage from '@/pages/admin';
 import { Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
@@ -174,6 +175,7 @@ function PrivateApp() {
               <Route path="/goals/:id" component={GoalDetailPage} />
               <Route path="/planner" component={PlannerPage} />
               <Route path="/tasks" component={TasksPage} />
+              <Route path="/time" component={TimePage} />
               <Route path="/reviews" component={ReviewsPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route path="/admin" component={AdminPage} />

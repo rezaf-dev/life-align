@@ -142,11 +142,11 @@ test('planned timers consume their reservation and schedule recurrence after the
   assert.equal(state().sessions!.find((s) => s.status === 'planned')!.plannedDate, '2024-02-02');
 });
 test('manual clock ranges split at local midnight and daylight-saving days preserve actual elapsed seconds', () => {
-  assert.deepEqual(manualTimeDays('2024-01-31T23:50', '2024-02-01T00:10', 'Europe/Istanbul'),
+  assert.deepEqual(manualTimeDays('2024-01-31T23:50', '2024-02-01T00:10', 'Europe/Istanbul').map(({ date, seconds }) => ({ date, seconds })),
     [{ date: '2024-01-31', seconds: 600 }, { date: '2024-02-01', seconds: 600 }]);
-  assert.deepEqual(manualTimeDays('2024-03-10T00:00', '2024-03-11T00:00', 'America/New_York'),
+  assert.deepEqual(manualTimeDays('2024-03-10T00:00', '2024-03-11T00:00', 'America/New_York').map(({ date, seconds }) => ({ date, seconds })),
     [{ date: '2024-03-10', seconds: 23 * 3600 }]);
-  assert.deepEqual(manualTimeDays('2024-11-03T00:00', '2024-11-04T00:00', 'America/New_York'),
+  assert.deepEqual(manualTimeDays('2024-11-03T00:00', '2024-11-04T00:00', 'America/New_York').map(({ date, seconds }) => ({ date, seconds })),
     [{ date: '2024-11-03', seconds: 25 * 3600 }]);
   assert.throws(() => manualTimeDays('2024-03-10T02:30', '2024-03-10T04:00', 'America/New_York'));
   assert.throws(() => manualTimeDays('2024-11-03T01:30', '2024-11-03T04:00', 'America/New_York'));

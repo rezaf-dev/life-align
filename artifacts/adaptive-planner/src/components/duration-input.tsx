@@ -10,18 +10,25 @@ const split = (sec: number) => {
 /**
  * Hours / minutes / optional seconds. Emits whole seconds so timer precision survives;
  * callers derive fractional minutes as seconds / 60. Text inputs avoid native number-step rounding.
- * State initializes once; remount with a key to reset from outside.
+ * Preserve in-progress text while reflecting changes made by the parent (such as automatic task allocation).
  */
 export function DurationInput({ seconds, onChange, showSeconds, disabled, label = 'Duration', testId = 'duration', className }: {
   seconds: number; onChange: (seconds: number) => void; showSeconds?: boolean; disabled?: boolean; label?: string; testId?: string; className?: string;
 }) {
   const [v, setV] = useState(() => split(seconds));
+  const [sourceSeconds, setSourceSeconds] = useState(seconds);
   const [reveal, setReveal] = useState(false);
+  if (sourceSeconds !== seconds) {
+    setSourceSeconds(seconds);
+    setV(split(seconds));
+  }
   const withSec = showSeconds || reveal || Math.round(seconds) % 60 !== 0;
   const set = (k: 'h' | 'm' | 's', raw: string) => {
     const next = { ...v, [k]: clean(raw) };
     setV(next);
-    onChange((Number(next.h) || 0) * 3600 + (Number(next.m) || 0) * 60 + (withSec ? Number(next.s) || 0 : 0));
+    const value = (Number(next.h) || 0) * 3600 + (Number(next.m) || 0) * 60 + (withSec ? Number(next.s) || 0 : 0);
+    setSourceSeconds(value);
+    onChange(value);
   };
   const box = (k: 'h' | 'm' | 's', unit: string) => (
     <label className="flex h-10 min-w-0 flex-1 items-center rounded-md border border-input bg-background pr-2 focus-within:ring-2 focus-within:ring-ring">

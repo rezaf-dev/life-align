@@ -67,6 +67,7 @@ import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
 import { SessionEntryRow, WorkSessionsPanel } from '@/components/work-sessions';
 import { GoalReports } from '@/components/goal-reports';
+import { GoalTimeSummary } from '@/components/time-summary';
 
 type DialogKind =
   | null
@@ -149,6 +150,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
           <p className="mt-1 text-sm text-muted-foreground md:text-[0.95rem]" data-testid="text-goal-outcome">
             {goal.outcome || <span className="italic">No desired outcome written yet.</span>}
           </p>
+          <GoalTimeSummary goalId={goal.id} />
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <AskButton focus={{ screen: 'goal', goalId: goal.id }} label="Ask about this goal" />

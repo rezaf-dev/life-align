@@ -124,6 +124,7 @@ export function StartTimerDialog({ req, onClose, onFinish }: { req: StartRequest
   const session = req.sessionId ? state.sessions?.find((s) => s.id === req.sessionId) : undefined;
   const task = req.taskId ? state.tasks.find((t) => t.id === req.taskId) : undefined;
   const initGoal = session?.goalId ?? req.goalId ?? task?.goalId ?? '';
+  const sameGroup = (id: string) => !!task && (task.goalId ?? '') === id;
   const [gid, setGid] = useState(initGoal);
   const goal = state.goals.find((g) => g.id === gid);
   const goals = state.goals.filter((g) => g.status === 'active' || g.status === 'paused' || g.id === initGoal);
@@ -132,7 +133,8 @@ export function StartTimerDialog({ req, onClose, onFinish }: { req: StartRequest
   const action = useStagedAction();
   const hasMetrics = timeMetrics(goal).length > 0;
   const metricChosen = !hasMetrics || !!metricId;
-  const valid = !!goal && !!title.trim() && metricChosen;
+  const general = gid === '';
+  const valid = (!!goal || general) && !!title.trim() && metricChosen;
 
   if (existing && !action.staged && !action.pending) {
     return (
@@ -149,7 +151,7 @@ export function StartTimerDialog({ req, onClose, onFinish }: { req: StartRequest
   }
 
   const start = () => void action.run(() => {
-    startWorkTimer({ title: title.trim(), goalId: gid, metricId: metricId && metricId !== NONE ? metricId : undefined, taskId: task && task.goalId === gid ? task.id : undefined, sessionId: session?.id });
+    startWorkTimer({ title: title.trim(), goalId: gid, metricId: metricId && metricId !== NONE ? metricId : undefined, taskId: sameGroup(gid) ? task!.id : undefined, sessionId: session?.id });
   }, () => { toast({ title: 'Timer started', description: 'It keeps running in the background, even if you close this tab, until you pause or finish.' }); onClose(); });
 
   return (
@@ -160,7 +162,8 @@ export function StartTimerDialog({ req, onClose, onFinish }: { req: StartRequest
       <Field label="What are you working on?" htmlFor="timer-title">
         <Input id="timer-title" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} disabled={action.frozen || !!session} data-testid="input-timer-title" />
       </Field>
-      {task && task.goalId === gid && <p className="text-xs text-muted-foreground" data-testid="text-timer-task">Linked to task "{task.title}". On finish, its time is allocated to this task by default. The task is not completed.</p>}
+      {task && sameGroup(gid) && <p className="text-xs text-muted-foreground" data-testid="text-timer-task">Linked to task "{task.title}". On finish, its time is allocated to this task by default. The task is not completed.</p>}
+      {general && <p className="text-xs text-muted-foreground" data-testid="text-timer-general">General work: the time is recorded in your totals without a goal or measure.</p>}
       {goal && (session ? (
         <EffectNote goal={goal} metricId={metricId || NONE} minutes={0} planned testId="text-timer-effect" />
       ) : hasMetrics ? (
@@ -227,7 +230,8 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const [remainingDate, setRemainingDate] = useState(today);
   const goal = state.goals.find((g) => g.id === gid);
   const goals = state.goals.filter((g) => g.status === 'active' || g.status === 'paused' || g.id === timer?.goalId);
-  const tasks = state.tasks.filter((t) => t.goalId === gid && !t.archived && (t.status === 'open' || rows.some((r) => r.allocs.some((a) => a.taskId === t.id))));
+  const general = gid === '';
+  const tasks = state.tasks.filter((t) => (t.goalId ?? '') === gid && !t.archived && (t.status === 'open' || rows.some((r) => r.allocs.some((a) => a.taskId === t.id))));
   const taskTitle = (id: string) => tasks.find((t) => t.id === id)?.title ?? 'Removed task';
   const total = rows.reduce((a, r) => a + r.seconds, 0);
   const long = total >= LONG_SECONDS;
@@ -235,7 +239,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
   const rowsOk = rows.every((r) => r.seconds >= 0 && r.seconds <= MAX_DAY_SECONDS && sumOf(r) <= r.seconds && r.allocs.every((a) => a.seconds > 0) && !!r.date && r.date <= maxDate);
   const linked = timer?.sessionId ? state.sessions?.find((x) => x.id === timer.sessionId && x.goalId === gid && x.status === 'planned') : undefined;
   const short = !!linked && total > 0 && total < linked.plannedMinutes * 60;
-  const valid = !!timer && !!goal && !!title.trim() && total > 0 && rowsOk && (!long || confirmLong) && outcomeReady(short, outcome, remainingDate, today);
+  const valid = !!timer && (!!goal || general) && !!title.trim() && total > 0 && rowsOk && (!long || confirmLong) && outcomeReady(short, outcome, remainingDate, today);
   const patch = (key: string, f: (r: DayRow) => DayRow) => setRows((s) => s.map((r) => (r.key === key ? f(r) : r)));
 
   if (!timer) {
@@ -252,7 +256,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
     const orphans = rows.filter((r) => r.seconds <= 0).flatMap((r) => cleanWorkDone(r.workDone));
     saveWorkTimer(timer.id, {
       workDoneSnapshot: timer.workDone ?? [],
-      title: title.trim(), goalId: gid, metricId: metricId === NONE ? undefined : metricId, notes,
+      title: title.trim(), goalId: gid, metricId: metricId === NONE || general ? undefined : metricId, notes,
       days: kept.map((r, i) => ({ date: r.date, actualMinutes: r.seconds / 60,
         workDone: cleanWorkDone(i === kept.length - 1 ? [...r.workDone, ...orphans] : r.workDone),
         allocations: r.allocs.filter((a) => tasks.some((t) => t.id === a.taskId)).map((a) => ({ taskId: a.taskId, minutes: a.seconds / 60 })) })),
@@ -273,7 +277,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
         <Input id="finish-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={action.frozen} data-testid="input-finish-title" />
       </Field>
       <GoalSelect goals={goals} value={gid} onChange={(v) => { setGid(v); setMetricId(NONE); setRows((s) => s.map((r) => ({ ...r, allocs: [] }))); }} disabled={action.frozen} />
-      {goal && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={action.frozen} testId="select-finish-metric" />}
+      {goal && !general && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={action.frozen} testId="select-finish-metric" />}
       <div className="space-y-2">
         <div className="flex items-baseline justify-between text-sm"><span className="font-medium">Time by day</span><span className="font-num text-xs text-muted-foreground" data-testid="text-finish-total">{formatElapsed(total)} total</span></div>
         <ul className="space-y-2" data-testid="list-finish-days">
@@ -294,10 +298,10 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span data-testid={`text-finish-alloc-summary-${i}`}>
-                    {r.allocs.length === 0 ? 'All goal time, no task' : r.allocs.map((a) => `${taskTitle(a.taskId)} ${formatElapsed(a.seconds)}`).join(' · ')}
+                    {r.allocs.length === 0 ? general ? 'General work, no task' : 'All goal time, no task' : r.allocs.map((a) => `${taskTitle(a.taskId)} ${formatElapsed(a.seconds)}`).join(' · ')}
                     {r.allocs.length > 0 && free > 0 && ` · ${formatElapsed(free)} general`}
                   </span>
-                  {goal && <button type="button" className="underline-offset-2 hover:underline" disabled={action.frozen} onClick={() => patch(r.key, (x) => ({ ...x, open: !x.open }))} data-testid={`button-finish-split-${i}`}>{r.open ? 'Done splitting' : 'Split across tasks'}</button>}
+                  {(goal || general) && <button type="button" className="underline-offset-2 hover:underline" disabled={action.frozen} onClick={() => patch(r.key, (x) => ({ ...x, open: !x.open }))} data-testid={`button-finish-split-${i}`}>{r.open ? 'Done splitting' : 'Split across tasks'}</button>}
                 </div>
                 {r.open && (
                   <div className="space-y-1.5 border-t border-border/60 pt-2">
@@ -314,7 +318,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
                       <SelectTrigger className="h-10" data-testid={`select-finish-add-task-${i}`}><SelectValue placeholder={avail.length ? 'Add a task' : 'No other open tasks'} /></SelectTrigger>
                       <SelectContent>{avail.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}</SelectContent>
                     </Select>
-                    <p className={cn('font-num text-xs', free < 0 ? 'text-destructive' : 'text-muted-foreground')}>{free < 0 ? `${formatElapsed(-free)} more than the day` : `${formatElapsed(free)} stays general goal time`}</p>
+                    <p className={cn('font-num text-xs', free < 0 ? 'text-destructive' : 'text-muted-foreground')}>{free < 0 ? `${formatElapsed(-free)} more than the day` : `${formatElapsed(free)} stays unallocated`}</p>
                   </div>
                 )}
                 <div className="border-t border-border/60 pt-2">
@@ -330,6 +334,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
           })}
         </ul>
         <p className="text-xs text-muted-foreground">Allocating never completes a task. Dates use the timer's time zone ({timer.timezone}).</p>
+        <p className="text-xs text-muted-foreground" data-testid="text-finish-time-of-day">Unchanged days keep their exact start and end times for your time-of-day view. If you adjust a day's duration, that day keeps the total but its time of day becomes unspecified.</p>
       </div>
       <Field label="Private notes" htmlFor="finish-notes" hint="Internal. Not on client timesheets unless you choose to include notes.">
         <Textarea id="finish-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={action.frozen} data-testid="input-finish-notes" />
@@ -344,7 +349,7 @@ export function FinishTimerDialog({ onClose }: { onClose: () => void }) {
           <span>This is over 8 hours. If the timer ran while you were away, lower the days above. Nothing is deducted automatically. <b className="font-medium">I checked these times.</b></span>
         </label>
       )}
-      {goal && <EffectNote goal={goal} metricId={metricId} minutes={total / 60} testId="text-finish-effect" />}
+      {(goal || general) && <EffectNote goal={goal} metricId={general ? NONE : metricId} minutes={total / 60} testId="text-finish-effect" />}
       {action.error && <p role="alert" className="text-sm text-destructive" data-testid="text-finish-error">{action.error}</p>}
       {action.staged && <p className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Check className="size-3" /> Saved on this device, waiting for your account.</p>}
     </FormDialog>

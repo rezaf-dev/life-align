@@ -1,15 +1,19 @@
 import { z } from 'zod';
 import { isMeasurementDate, type MeasurementEvent } from './measurements';
+import { timeTrackingDate } from './time-tracking';
 
 const date = z.string().refine(isMeasurementDate, 'Choose a real date.');
 export const workDoneListSchema = z.array(z.string().max(2000)).max(200)
   .transform((items) => items.map((item) => item.trim()).filter(Boolean));
 export const workSessionSchema = z.object({
-  id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string().min(1),
+  id: z.string().min(1), title: z.string().trim().min(1), goalId: z.string(),
+  timeIntervals: z.array(z.object({ start: z.string().datetime(), end: z.string().datetime() })).min(1).max(2000).optional(),
+  timezone: z.string().refine((zone) => { try { new Intl.DateTimeFormat('en', { timeZone: zone }); return true; } catch { return false; } }, 'Choose a valid time zone.').optional(),
   metricId: z.string().optional(), plannedDate: date.optional(),
   plannedMinutes: z.number().finite().min(0).max(1440),
   originalPlannedMinutes: z.number().finite().positive().max(1440).optional(),
   continuationOfId: z.string().optional(), remainderSessionId: z.string().optional(),
+  plannedWork: z.boolean().optional(),
   sessionOutcome: z.enum(['finish', 'continue', 'replan']).optional(),
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
   taskIds: z.array(z.string()).max(100),
@@ -30,6 +34,21 @@ export const workSessionSchema = z.object({
   if (s.status === 'skipped' && !s.skippedAt) ctx.addIssue({ code: 'custom', message: 'Skipped sessions need a skip date.' });
   if (s.allocations.reduce((sum, row) => sum + row.minutes, 0) - (s.actualMinutes ?? 0) > 1e-8) ctx.addIssue({ code: 'custom', message: 'Task time cannot exceed the session duration.' });
   if (new Set(s.allocations.map((a) => a.taskId)).size !== s.allocations.length) ctx.addIssue({ code: 'custom', message: 'Allocate time to each task once per session.' });
+  if (!!s.timeIntervals !== !!s.timezone) ctx.addIssue({ code: 'custom', message: 'Working intervals need their time zone.' });
+  if (s.timeIntervals && s.timezone) {
+    let end = -Infinity, minutes = 0;
+    for (const interval of s.timeIntervals) {
+      const start = Date.parse(interval.start), next = Date.parse(interval.end);
+      if (start < end || next <= start) ctx.addIssue({ code: 'custom', message: 'Working intervals must be ordered and non-overlapping.' });
+      try {
+        if (timeTrackingDate(s.timezone, start) !== s.date || timeTrackingDate(s.timezone, next - 1) !== s.date) {
+          ctx.addIssue({ code: 'custom', message: 'Working intervals must belong to the recorded local date.' });
+        }
+      } catch { ctx.addIssue({ code: 'custom', message: 'Choose a valid time zone.' }); }
+      minutes += (next - start) / 60000; end = next;
+    }
+    if (s.status !== 'logged' || Math.abs(minutes - (s.actualMinutes ?? 0)) > 1e-8) ctx.addIssue({ code: 'custom', message: 'Working intervals must match the actual time exactly.' });
+  }
 });
 export type WorkSession = z.infer<typeof workSessionSchema>;
 
@@ -66,7 +85,7 @@ export function plannedWorkMinutes(
   }, start: string, end: string,
 ) {
   const sessions = (state.sessions ?? []).filter((s) => s.status !== 'skipped' && s.plannedDate && s.plannedDate >= start && s.plannedDate <= end);
-  const covered = new Set(sessions.flatMap((s) => s.taskIds.filter((id) => state.tasks.some((t) => t.id === id && t.goalId === s.goalId))));
+  const covered = new Set(sessions.flatMap((s) => s.taskIds.filter((id) => state.tasks.some((t) => t.id === id && (t.goalId ?? '') === s.goalId))));
   return sessions.reduce((sum, s) => sum + s.plannedMinutes, 0)
     + state.tasks.filter((t) => !t.archived && t.plannedDate && t.plannedDate >= start && t.plannedDate <= end && !covered.has(t.id))
       .reduce((sum, t) => sum + t.effort, 0);
@@ -93,6 +112,10 @@ export function sessionLedgerIssues(state: {
   }
   for (const session of sessions.values()) {
     const goal = state.goals.find((g) => g.id === session.goalId);
+    if (!session.goalId) {
+      if (session.metricId) issues.push('General work cannot credit a goal measure.');
+      continue;
+    }
     if (!goal) { issues.push('A work session must belong to an existing goal.'); continue; }
     const metric = goal.metrics.find((m) => m.id === session.metricId);
     if (session.metricId && (!metric || !timeUnitMinutes(metric.unit))) {

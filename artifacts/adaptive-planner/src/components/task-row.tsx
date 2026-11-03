@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
-import { Archive, ArchiveRestore, Bell, CalendarDays, Inbox, MoreHorizontal, Pencil, Play, Repeat, Timer, Trash2, TrendingUp } from 'lucide-react';
+import { Archive, ArchiveRestore, Bell, Clock3, CalendarDays, Inbox, MoreHorizontal, Pencil, Play, Repeat, Timer, Trash2, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -25,6 +25,7 @@ import { useAppState } from '@/lib/store/store';
 import type { Task } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { useWorkSessionActions } from '@/components/work-session-provider';
+import { LogSessionDialog } from '@/components/work-sessions';
 
 /** Compact, always-visible schedule control. Uses the existing rescheduleTasks action. */
 export function ScheduleControl({ task, hideLabel }: { task: Task; hideLabel?: boolean }) {
@@ -169,6 +170,7 @@ function TaskRowInner({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [addingTime, setAddingTime] = useState(false);
   const sessions = useWorkSessionActions();
   const goal = goals.find((g) => g.id === task.goalId);
   const done = task.status === 'done';
@@ -276,9 +278,14 @@ function TaskRowInner({
               <Timer /> Convert to work session
             </DropdownMenuItem>
           )}
-          {goal && !task.archived && (
-            <DropdownMenuItem onSelect={() => sessions.start({ goalId: goal.id, taskId: task.id, title: task.title })} data-testid={`menu-track-time-${task.id}`}>
+          {!task.archived && (
+            <DropdownMenuItem onSelect={() => sessions.start({ goalId: task.goalId ?? '', taskId: task.id, title: task.title })} data-testid={`menu-track-time-${task.id}`}>
               <Play /> Track time
+            </DropdownMenuItem>
+          )}
+          {!task.archived && (
+            <DropdownMenuItem onSelect={() => setAddingTime(true)} data-testid={`menu-add-time-${task.id}`}>
+              <Clock3 /> Add time
             </DropdownMenuItem>
           )}
           {goal && (
@@ -302,6 +309,7 @@ function TaskRowInner({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {addingTime && <LogSessionDialog taskId={task.id} goalId={task.goalId ?? ''} onClose={() => setAddingTime(false)} />}
       <TaskDialog open={editing} onOpenChange={setEditing} task={task} />
       {goal && recording && <RecordResultDialog goal={goal} open={recording} onOpenChange={setRecording} target={{ taskId: task.id }} />}
       <ConfirmDialog

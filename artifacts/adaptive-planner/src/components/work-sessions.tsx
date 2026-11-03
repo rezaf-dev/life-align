@@ -23,6 +23,9 @@ import { cn } from '@/lib/utils';
 import { SessionOutcomeChoice, outcomeReady, type SessionOutcome } from '@/components/session-outcome';
 
 export const NONE = '__time_only__';
+/** Radix Select needs a nonempty value; maps to goalId '' (General work). */
+export const GENERAL = '__general__';
+export const GENERAL_LABEL = 'General work';
 const errText = (applied: boolean, err: unknown) =>
   `${applied ? 'Changed on this device, but not saved to your account yet. ' : ''}${err instanceof Error ? err.message : 'Please try saving again.'}`;
 const mins = formatMinutes;
@@ -65,10 +68,11 @@ export function MeasureSelect({ goal, value, onChange, disabled, testId, placeho
 
 export function GoalSelect({ goals, value, onChange, disabled }: { goals: Goal[]; value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
-    <Field label="Goal">
-      <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Field label="Goal" hint={value === '' ? 'General work counts toward your time totals without belonging to a goal.' : undefined}>
+      <Select value={value === '' ? GENERAL : value} onValueChange={(v) => onChange(v === GENERAL ? '' : v)} disabled={disabled}>
         <SelectTrigger data-testid="select-session-goal"><SelectValue placeholder="Choose a goal" /></SelectTrigger>
         <SelectContent>
+          <SelectItem value={GENERAL}><span className="inline-flex items-center gap-2"><span aria-hidden className="size-2 rounded-full border border-muted-foreground/60" /> {GENERAL_LABEL}</span></SelectItem>
           {goals.map((g) => <SelectItem key={g.id} value={g.id}><span className="inline-flex items-center gap-2"><AreaDot area={g.area} /> {g.title}</span></SelectItem>)}
         </SelectContent>
       </Select>
@@ -95,16 +99,17 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
   const [error, setError] = useState('');
   const applied = useRef(false);
   const frozen = pending || staged;
-  const goalTasks = state.tasks.filter((t) => t.goalId === gid && !t.archived && (t.status === 'open' || taskIds.includes(t.id)));
+  const goalTasks = state.tasks.filter((t) => (t.goalId ?? '') === gid && !t.archived && (t.status === 'open' || taskIds.includes(t.id)));
+  const general = gid === '';
   const n = Number(minutes);
-  const valid = !!goal && !!title.trim() && Number.isFinite(n) && n >= 0 && n <= 1440 && (recurrence === 'none' || !!plannedDate);
+  const valid = (!!goal || general) && !!title.trim() && Number.isFinite(n) && n >= 0 && n <= 1440 && (recurrence === 'none' || !!plannedDate);
 
   const save = async () => {
     if (pending) return;
     setPending(true); setError('');
     try {
       if (!applied.current) {
-        saveWorkSession({ title, goalId: gid, metricId: metricId === NONE ? undefined : metricId, plannedDate: plannedDate || undefined,
+        saveWorkSession({ title, goalId: gid, metricId: metricId === NONE || general ? undefined : metricId, plannedDate: plannedDate || undefined,
           plannedMinutes: n, recurrence, taskIds: taskIds.filter((id) => goalTasks.some((t) => t.id === id)), notes }, session?.id);
         applied.current = true; setStaged(true);
       }
@@ -116,7 +121,7 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
 
   return (
     <FormDialog open onOpenChange={(o) => { if (!o && !pending) onClose(); }} title={session ? 'Edit planned session' : 'Plan a work session'}
-      description="Reserve a block of time for a goal. This is a plan, separate from completing tasks."
+      description="Reserve a block of time for focused work. This is a plan, separate from completing tasks."
       submitLabel={pending ? 'Saving…' : staged ? 'Retry saving' : session ? 'Save session' : 'Plan session'} canSubmit={!pending && (staged || valid)} onSubmit={() => void save()}>
       {!goalId && <GoalSelect goals={goals} value={gid} onChange={(v) => { setGid(v); setTaskIds([]); setMetricId(timeMetrics(state.goals.find((g) => g.id === v))[0]?.id ?? NONE); }} disabled={frozen || !!session} />}
       <Field label="Title" htmlFor="session-title">
@@ -142,9 +147,9 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
         </Select>
       </Field>
       {goal && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={frozen} testId="select-session-metric" />}
-      {goal && (
+      {(goal || general) && (
         <Field label="Tasks inside this time (optional)" hint="Their estimates are covered by this reservation, so capacity counts the time once.">
-          {goalTasks.length === 0 ? <p className="text-xs text-muted-foreground">No open tasks on this goal.</p> : (
+          {goalTasks.length === 0 ? <p className="text-xs text-muted-foreground">{general ? 'No open tasks without a goal.' : 'No open tasks on this goal.'}</p> : (
             <ul className="max-h-40 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1" data-testid="list-session-tasks">
               {goalTasks.map((t) => (
                 <li key={t.id}>
@@ -163,7 +168,7 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
       <Field label="Notes" htmlFor="session-notes">
         <Textarea id="session-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={frozen} data-testid="input-session-notes" />
       </Field>
-      {goal && <EffectNote goal={goal} metricId={metricId} minutes={0} planned testId="text-session-plan-effect" />}
+      {(goal || general) && <EffectNote goal={goal} metricId={general ? NONE : metricId} minutes={0} planned testId="text-session-plan-effect" />}
       {error && <p role="alert" className="text-sm text-destructive" data-testid="text-session-error">{error}</p>}
     </FormDialog>
   );
@@ -178,7 +183,7 @@ const hms = (sec: number) => {
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m${s % 60 ? ` ${s % 60}s` : ''}`;
 };
 
-export function LogSessionDialog({ session, goalId, date, onClose }: { session?: WorkSession; goalId?: string; date?: string; onClose: () => void }) {
+export function LogSessionDialog({ session, goalId, taskId, date, onClose }: { session?: WorkSession; goalId?: string; taskId?: string; date?: string; onClose: () => void }) {
   const state = useAppState();
   const { toast } = useToast();
   const today = todayIso();
@@ -186,9 +191,11 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   const isCorrection = session?.status === 'logged';
   const editable = isNew || isCorrection;
   const goals = state.goals.filter((g) => g.status === 'active' || g.status === 'paused' || g.id === (session?.goalId ?? goalId));
-  const [gid, setGid] = useState(session?.goalId ?? goalId ?? '');
+  const initTask = !session && taskId ? state.tasks.find((t) => t.id === taskId) : undefined;
+  const [gid, setGid] = useState(session?.goalId ?? goalId ?? initTask?.goalId ?? '');
   const goal = state.goals.find((g) => g.id === gid);
-  const [title, setTitle] = useState(session?.title ?? '');
+  const general = gid === '';
+  const [title, setTitle] = useState(session?.title ?? initTask?.title ?? '');
   const [metricId, setMetricId] = useState(session ? session.metricId ?? NONE : timeMetrics(goal)[0]?.id ?? NONE);
   const [mode, setMode] = useState<'duration' | 'range'>('duration');
   const [day, setDay] = useState(session?.date ?? (session?.plannedDate && session.plannedDate <= today ? session.plannedDate : date && date <= today ? date : today));
@@ -196,10 +203,11 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [zone] = useState(deviceZone);
-  const [linkTask, setLinkTask] = useState(NONE);
+  const [linkTask, setLinkTask] = useState(initTask?.id ?? NONE);
   const [notes, setNotes] = useState(session?.notes ?? '');
   const [rows, setRows] = useState<Row[]>(() => session?.allocations.length
     ? session.allocations.map((a) => ({ key: a.taskId, taskId: a.taskId, seconds: Math.round(a.minutes * 60) }))
+    : initTask ? [{ key: initTask.id, taskId: initTask.id, seconds: 0 }]
     : (session?.taskIds ?? []).map((id) => ({ key: id, taskId: id, seconds: 0 })));
   const [newTitle, setNewTitle] = useState('');
   const [single, setSingle] = useState<string[]>(() => session?.workDone ?? []);
@@ -213,16 +221,19 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   const logged = useRef(false);
   const frozen = pending || staged;
 
-  const goalTasks = useMemo(() => state.tasks.filter((t) => t.goalId === gid && !t.archived), [state.tasks, gid]);
+  const goalTasks = useMemo(() => state.tasks.filter((t) => (t.goalId ?? '') === gid && !t.archived), [state.tasks, gid]);
+  // A single task row added from a task follows the duration until the user edits it.
+  const followTask = !!initTask && rows.length === 1 && rows[0].taskId === initTask.id;
   // Snapshot rows for deleted tasks stay editable as long as the goal is unchanged.
   const titleOf = (r: Row) => r.newTitle ?? goalTasks.find((t) => t.id === r.taskId)?.title ?? (gid === session?.goalId ? session?.allocations.find((a) => a.taskId === r.taskId)?.taskTitle : undefined) ?? 'Removed task';
   const available = goalTasks.filter((t) => t.status === 'open' && !rows.some((r) => r.taskId === t.id));
   const addRow = (r: Row) => setRows((s) => [...s, r]);
 
   const range = useMemo(() => {
-    if (mode !== 'range' || !startAt || !endAt) return { days: [] as { date: string; seconds: number }[], err: '' };
+    type RangeDay = ReturnType<typeof manualTimeDays>[number];
+    if (mode !== 'range' || !startAt || !endAt) return { days: [] as RangeDay[], err: '' };
     try { return { days: manualTimeDays(startAt, endAt, zone), err: '' }; }
-    catch (e) { return { days: [] as { date: string; seconds: number }[], err: e instanceof Error ? e.message : 'Check the start and end.' }; }
+    catch (e) { return { days: [] as RangeDay[], err: e instanceof Error ? e.message : 'Check the start and end.' }; }
   }, [mode, startAt, endAt, zone]);
 
   // Range mode: each item belongs to one date. Items from outside the range (or from duration mode) sit on the last day.
@@ -240,10 +251,10 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
   const allocated = rows.reduce((s, r) => s + r.seconds, 0);
   const remainder = seconds - allocated;
   const rowsValid = rows.every((r) => r.seconds > 0);
-  const valid = !!goal && (!editable || !!title.trim()) && (mode === 'range'
+  const valid = (!!goal || general) && (!editable || !!title.trim()) && (mode === 'range'
     ? range.days.length > 0 && !range.err && range.days.every((d) => d.seconds <= MAX_SECONDS && d.date <= today)
     : seconds > 0 && seconds <= MAX_SECONDS && !!day && day <= today && rowsValid && remainder >= 0);
-  const metricOut = metricId === NONE ? undefined : metricId;
+  const metricOut = metricId === NONE || general ? undefined : metricId;
   // Only an existing planned session logged short of its plan asks what happens to the rest.
   const plannedSession = !!session && session.status === 'planned' && mode === 'duration';
   const short = plannedSession && seconds > 0 && seconds < (session?.plannedMinutes ?? 0) * 60;
@@ -260,7 +271,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
         } else if (isNew && mode === 'range') {
           const link = linkTask !== NONE && goalTasks.some((t) => t.id === linkTask) ? linkTask : undefined;
           recordManualWork({ title: title.trim(), goalId: gid, metricId: metricOut, plannedMinutes: 0, recurrence: 'none', taskIds: [], notes },
-            range.days.map((d) => ({ date: d.date, actualMinutes: d.seconds / 60, workDone: cleanWorkDone(dayLists[d.date]), allocations: link ? [{ taskId: link, minutes: d.seconds / 60 }] : [] })));
+            range.days.map((d) => ({ date: d.date, actualMinutes: d.seconds / 60, timeIntervals: d.intervals, timezone: d.timezone, workDone: cleanWorkDone(dayLists[d.date]), allocations: link ? [{ taskId: link, minutes: d.seconds / 60 }] : [] })));
         } else {
           const result = { date: day, actualMinutes: seconds / 60, notes, allocations, workDone: cleanWorkDone(single),
             newTasks: rows.filter((r) => r.newTitle).map((r) => ({ key: r.key, title: r.newTitle!, minutes: r.seconds / 60 })) };
@@ -285,7 +296,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
       title={isCorrection ? 'Edit logged time' : isNew ? 'Add time' : `Log time: ${session.title}`}
       description={isCorrection ? `Edits replace this record and its measure credit. Repeating plans${session?.remainderSessionId ? ' and the separately planned remaining time' : ''} are not changed.` : 'Enter the actual time you spent. It is recorded once; editing later corrects it.'}
       submitLabel={pending ? 'Saving…' : staged ? 'Retry saving' : isCorrection ? 'Save changes' : 'Add time'} canSubmit={!pending && (staged || (valid && outcomeOk))} onSubmit={() => void save()}>
-      {editable && !(isNew && goalId) && (
+      {editable && !(isNew && goalId !== undefined) && (
         <GoalSelect goals={goals} value={gid} disabled={frozen}
           onChange={(v) => { setGid(v); setLinkTask(NONE); setRows((s) => (v === session?.goalId ? s : [])); setMetricId(isCorrection ? NONE : timeMetrics(state.goals.find((g) => g.id === v))[0]?.id ?? NONE); }} />
       )}
@@ -317,7 +328,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
               {range.days.map((d) => <li key={d.date} className="flex justify-between font-num"><span>{fmt(d.date, 'EEE MMM d')}</span><span>{hms(d.seconds)}</span></li>)}
             </ul>
           )}
-          {goal && (
+          {(goal || general) && (
             <Field label="Link a task (optional)" hint="The task receives each day's whole time. It is not completed.">
               <Select value={linkTask} onValueChange={setLinkTask} disabled={frozen}>
                 <SelectTrigger data-testid="select-range-task"><SelectValue /></SelectTrigger>
@@ -335,17 +346,22 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
             <Input id="log-date" type="date" max={today} value={day} onChange={(e) => setDay(e.target.value)} disabled={frozen} className="font-num" data-testid="input-log-date" />
           </Field>
           <Field label="Actual time" hint={seconds > MAX_SECONDS ? 'At most 25 hours for one day.' : session?.plannedMinutes ? `Planned ${mins(session.plannedMinutes)}` : undefined}>
-            <DurationInput seconds={seconds} onChange={setSeconds} disabled={frozen} label="Actual time" testId="log-duration" />
+            <DurationInput seconds={seconds} onChange={(sec) => { setSeconds(sec); if (followTask && rows[0].seconds === seconds) setRows([{ ...rows[0], seconds: sec }]); }} disabled={frozen} label="Actual time" testId="log-duration" />
           </Field>
         </div>
+      )}
+      {mode === 'duration' && (
+        <p className="text-xs text-muted-foreground" data-testid="text-log-time-of-day">
+          {isCorrection && session?.timeIntervals?.length ? 'Changing the date or duration clears the recorded start and end times, so this entry will show an unspecified time of day.' : 'A duration has no start or end, so it counts in your totals with an unspecified time of day. Use Start and end to place it in the day.'}
+        </p>
       )}
       {short && session && (
         <SessionOutcomeChoice actualMinutes={seconds / 60} plannedMinutes={session.plannedMinutes} value={outcome} onChange={setOutcome}
           date={remainingDate} onDateChange={setRemainingDate} today={today} disabled={frozen} testId="log-outcome" />
       )}
-      {editable && goal && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={frozen} testId="select-log-metric" />}
+      {editable && goal && !general && <MeasureSelect goal={goal} value={metricId} onChange={setMetricId} disabled={frozen} testId="select-log-metric" />}
 
-      {goal && mode === 'duration' && (
+      {(goal || general) && mode === 'duration' && (
         <div className="space-y-2">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-sm font-medium">Split across tasks <span className="font-normal text-muted-foreground">(optional)</span></span>
@@ -353,7 +369,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
               {remainder < 0 ? `${hms(-remainder)} over the session` : `${hms(Math.max(0, remainder))} unallocated`}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">Allocating time never completes a task. Unallocated time still counts for the goal.</p>
+          <p className="text-xs text-muted-foreground">Allocating time never completes a task. Unallocated time still counts for the {general ? 'general work' : 'goal'}.</p>
           {rows.length > 0 && (
             <ul className="space-y-1" data-testid="list-log-allocations">
               {rows.map((r) => (
@@ -382,7 +398,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
               </div>
             )}
           </div>
-          {rows.some((r) => r.newTitle) && <p className="text-xs text-muted-foreground">New tasks are captured open and unscheduled on this goal. Mark them done yourself if they are finished.</p>}
+          {rows.some((r) => r.newTitle) && <p className="text-xs text-muted-foreground">New tasks are captured open and unscheduled {general ? 'without a goal' : 'on this goal'}. Mark them done yourself if they are finished.</p>}
         </div>
       )}
       {mode === 'range' && rangeDates.length > 0 ? (
@@ -402,7 +418,7 @@ export function LogSessionDialog({ session, goalId, date, onClose }: { session?:
       <Field label="Private notes" htmlFor="log-notes" hint="Internal. Not on client timesheets unless you choose to include notes.">
         <Textarea id="log-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={frozen} data-testid="input-log-notes" />
       </Field>
-      {goal && <EffectNote goal={goal} metricId={editable ? metricId : session?.metricId ?? NONE} minutes={total / 60} testId="text-log-effect" />}
+      {(goal || general) && <EffectNote goal={goal} metricId={general ? NONE : editable ? metricId : session?.metricId ?? NONE} minutes={total / 60} testId="text-log-effect" />}
       {error && <p role="alert" className="text-sm text-destructive" data-testid="text-log-error">{error}</p>}
     </FormDialog>
   );
@@ -523,7 +539,7 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
           {s.recurrence !== 'none' && <Repeat className="mt-1 size-3 shrink-0 text-muted-foreground" aria-label={`Repeats ${s.recurrence}`} />}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-          {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>No goal</span>)}
+          {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>{GENERAL_LABEL}</span>)}
           {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
           {isPlanned && <span>{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} task${s.taskIds.length > 1 ? 's' : ''}` : ''}</span>}
           {isSkipped && <span>No time credited</span>}

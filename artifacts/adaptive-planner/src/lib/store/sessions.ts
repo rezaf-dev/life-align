@@ -16,6 +16,8 @@ export interface SessionResult {
   allowedThroughDate?: string;
   outcome?: 'finish' | 'continue' | 'replan';
   remainingDate?: string;
+  timeIntervals?: { start: string; end: string }[];
+  timezone?: string;
 }
 export type SessionOutcome = NonNullable<SessionResult['outcome']>;
 
@@ -35,7 +37,7 @@ export function applySessionOutcome(
   if (session.remainderSessionId) throw new Error('This session already has a remaining plan. Edit that plan instead.');
   const remainder = buildSession({
     ...session, plannedMinutes: remaining, plannedDate: date, recurrence: 'none',
-    taskIds: session.taskIds.filter((id) => state.tasks.some((t) => t.id === id && t.goalId === session.goalId && !t.archived && t.status === 'open')),
+    taskIds: session.taskIds.filter((id) => state.tasks.some((t) => t.id === id && (t.goalId ?? '') === session.goalId && !t.archived && t.status === 'open')),
     workDone: undefined, notes: '',
   });
   remainder.continuationOfId = session.id;
@@ -47,12 +49,12 @@ export function applySessionOutcome(
 }
 export function validateDraft(state: AppState, input: SessionDraft) {
   const goal = state.goals.find((g) => g.id === input.goalId);
-  if (!goal) throw new Error('Choose an existing goal for this session.');
+  if (input.goalId && !goal) throw new Error('Choose an existing goal for this session.');
   if (input.metricId) {
-    const metric = goal.metrics.find((m) => m.id === input.metricId);
+    const metric = goal?.metrics.find((m) => m.id === input.metricId);
     if (!metric || !timeUnitMinutes(metric.unit)) throw new Error('Choose an hours or minutes measure belonging to this goal.');
   }
-  if (input.taskIds.some((id) => !state.tasks.some((t) => t.id === id && t.goalId === goal.id && !t.archived))) throw new Error('Choose tasks belonging to this goal.');
+  if (input.taskIds.some((id) => !state.tasks.some((t) => t.id === id && (t.goalId ?? '') === input.goalId && !t.archived))) throw new Error('Choose tasks belonging to this goal or general work.');
   if (input.recurrence !== 'none' && !input.plannedDate) throw new Error('Recurring sessions need a planned date.');
 }
 export function buildSession(input: SessionDraft): WorkSession {
@@ -77,8 +79,9 @@ export function saveWorkSession(input: SessionDraft, id?: string): string {
 }
 function syncCredits(state: AppState, session: WorkSession) {
   const goal = state.goals.find((g) => g.id === session.goalId);
-  if (!goal) throw new Error('The session goal no longer exists.');
-  const metric = session.metricId ? goal.metrics.find((m) => m.id === session.metricId) : undefined;
+  if (session.goalId && !goal) throw new Error('The session goal no longer exists.');
+  if (!goal && session.metricId) throw new Error('General work cannot credit a goal measure.');
+  const metric = session.metricId ? goal?.metrics.find((m) => m.id === session.metricId) : undefined;
   if (session.metricId && !metric) throw new Error('The session measure was removed. Restore it or keep this session as time-only.');
   const divisor = metric ? timeUnitMinutes(metric.unit) : null;
   if (metric && !divisor) throw new Error('Session time can only contribute to an hours or minutes measure.');
@@ -125,7 +128,7 @@ export function logWorkSessionInDraft(state: AppState, id: string, input: Sessio
       if (!item.title.trim()) throw new Error('Name the unexpected work.');
       const taskId = `${session.id}-${item.key}`;
       if (!state.tasks.some((t) => t.id === taskId)) state.tasks.unshift({
-        id: taskId, title: item.title.trim(), goalId: session.goalId, priority: 'medium', effort: 0, notes: '',
+        id: taskId, title: item.title.trim(), goalId: session.goalId || undefined, priority: 'medium', effort: 0, notes: '',
         recurrence: 'none', status: 'open', archived: false, createdAt: nowStamp(), isDemo: false,
       });
       return { taskId, minutes: item.minutes };
@@ -133,16 +136,24 @@ export function logWorkSessionInDraft(state: AppState, id: string, input: Sessio
     const allocations = [...input.allocations, ...newAllocations].map((a) => {
       const task = state.tasks.find((t) => t.id === a.taskId);
       const previous = previousAllocations.find((p) => p.taskId === a.taskId);
-      if ((!task || task.goalId !== session.goalId) && !previous) throw new Error('Choose a task belonging to this session’s goal.');
+      if ((!task || (task.goalId ?? '') !== session.goalId) && !previous) throw new Error('Choose a task belonging to this session’s goal or general work.');
       // Historical attribution survives task deletion or relinking.
       const milestone = state.goals.find((g) => g.id === session.goalId)?.milestones.find((m) => m.id === task?.milestoneId);
       return { ...a, taskTitle: previous?.taskTitle ?? task!.title,
         milestoneId: previous?.milestoneId ?? milestone?.id, milestoneTitle: previous?.milestoneTitle ?? milestone?.title };
     });
     const wasLogged = session.status === 'logged';
+    if (!wasLogged) session.plannedWork = !!(session.plannedDate && session.plannedMinutes > 0) ||
+      allocations.some((a) => state.tasks.some((t) => t.id === a.taskId && t.plannedDate === input.date));
+    // A corrected duration/date cannot keep the previous clock positions.
+    const keepIntervals = session.date === input.date && Math.abs((session.actualMinutes ?? 0) - input.actualMinutes) < 1e-8;
     Object.assign(session, workSessionSchema.parse({ ...session, date: input.date, actualMinutes: input.actualMinutes,
       allocations, notes: input.notes ?? session.notes, workDone: input.workDone ?? session.workDone,
+      timeIntervals: input.timeIntervals ?? (keepIntervals ? session.timeIntervals : undefined),
+      timezone: input.timeIntervals ? input.timezone : keepIntervals ? session.timezone : undefined,
       status: 'logged', loggedAt: session.loggedAt ?? nowStamp() }));
+    // Object.assign cannot remove optional properties omitted by parsing.
+    if (!input.timeIntervals && !keepIntervals) { delete session.timeIntervals; delete session.timezone; }
     syncCredits(state, session);
     if (!wasLogged && session.recurrence !== 'none' && !session.spawnedNextId) {
       const base = session.plannedDate ?? input.date;
