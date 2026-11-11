@@ -2,7 +2,7 @@ import { measurementTargetAt, plannedWorkMinutes } from '@workspace/api-zod';
 import { DayAgenda } from '@/components/day-agenda';
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { ArrowRight, Bell, Check, Compass, Flag, Info, LineChart, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, Flag, Info, LineChart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MissedWork } from '@/components/missed-work';
 import { useTaskCompletion } from '@/components/task-completion';
@@ -25,8 +25,6 @@ import type { Goal } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
 import { OverviewTimeCard } from '@/components/time-summary';
-import { getGoalPaceFeedback } from '@/lib/goal-pace';
-import { formatMinutes } from '@/lib/reports';
 
 function greeting() {
   const h = new Date().getHours();
@@ -34,85 +32,6 @@ function greeting() {
   if (h < 12) return 'Good morning';
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
-}
-
-/** The top of the day: this week's focus, today's sessions, reserved vs logged time, and one next step. */
-function TodayPlan({ focus, reviewDue }: { focus?: string; reviewDue: boolean }) {
-  const state = useAppState();
-  const today = todayIso();
-  const sessions = (state.sessions ?? []).filter((s) => s.plannedDate === today && s.status === 'planned')
-    .sort((a, b) => (a.plannedTime ?? '99').localeCompare(b.plannedTime ?? '99'));
-  const reserved = sessions.reduce((a, s) => a + s.plannedMinutes, 0);
-  const logged = (state.sessions ?? []).filter((s) => s.status === 'logged' && s.date === today).reduce((a, s) => a + (s.actualMinutes ?? 0), 0);
-  const openToday = state.tasks.filter((t) => !t.archived && t.status !== 'done' && (t.plannedDate === today || t.dueDate === today));
-  const next = state.activeTimer
-    ? { text: `Continue "${state.activeTimer.title}" using the timer above`, href: '', cta: '' }
-    : sessions[0]
-      ? { text: `Begin "${sessions[0].title}"${sessions[0].plannedTime ? ` at ${sessions[0].plannedTime}` : ''}`, href: '/planner?view=day', cta: 'Open today' }
-      : openToday[0]
-        ? { text: `Finish "${openToday[0].title}"`, href: '/tasks?view=today', cta: 'Open today’s tasks' }
-        : !focus
-          ? { text: 'Choose one focus so the week has a direction', href: '/planner?view=week', cta: 'Choose focus' }
-          : reviewDue
-            ? { text: 'Close last week with a short review', href: '/reviews?start=weekly', cta: 'Start review' }
-            : { text: 'Nothing remaining today. Reserve a session if you want to do more', href: '/planner?view=day', cta: 'Plan today' };
-  const total = Math.max(1, reserved, logged);
-  return (
-    <div className="mb-4 rounded-xl bg-accent/35 p-3 sm:p-4" data-testid="panel-today-plan">
-      <div className="flex items-start gap-2.5">
-        <Compass className="mt-1 size-4 shrink-0 text-primary" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className="text-xs text-muted-foreground">This week's focus</div>
-          {focus ? (
-            <p className="font-display text-lg leading-snug" data-testid="text-week-focus">{focus}</p>
-          ) : (
-            <Link href="/planner?view=week" className="inline-flex min-h-8 items-center gap-1 font-display text-lg text-primary hover:underline" data-testid="link-choose-focus">
-              Choose this week's focus <ArrowRight className="size-4" />
-            </Link>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <div className="text-xs text-muted-foreground">Planned sessions today</div>
-          <p className="text-sm" data-testid="text-today-sessions">
-            {sessions.length === 0 ? 'None reserved' : `${sessions.length} session${sessions.length === 1 ? '' : 's'}: ${sessions.slice(0, 3).map((s) => (s.plannedTime ? `${s.plannedTime} ${s.title}` : s.title)).join(', ')}${sessions.length > 3 ? ` and ${sessions.length - 3} more` : ''}`}
-          </p>
-        </div>
-        <div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            Reserved vs logged
-            <details className="relative">
-              <summary className="inline-flex size-6 cursor-pointer items-center justify-center rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="What reserved and logged mean" data-testid="button-reserved-help"><Info className="size-3.5" /></summary>
-              <p className="absolute right-0 z-10 mt-1 w-60 max-w-[calc(100vw-3rem)] rounded-lg border border-border bg-popover p-2.5 text-xs text-popover-foreground shadow-md">
-                Reserved is time you set aside in planned sessions, an intention. Logged is time you actually recorded as worked. Only logged time counts as real work in reports.
-              </p>
-            </details>
-          </div>
-          <div className="mt-1 space-y-1">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-16 text-muted-foreground">Reserved</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background/70" aria-hidden><div className="h-full w-full origin-left rounded-full bg-primary/40" style={{ transform: `scaleX(${reserved / total})` }} /></div>
-              <span className="w-14 text-right font-num" data-testid="text-today-reserved">{formatMinutes(reserved)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-16 text-muted-foreground">Logged</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background/70" aria-hidden><div className="h-full w-full origin-left rounded-full bg-primary" style={{ transform: `scaleX(${logged / total})` }} /></div>
-              <span className="w-14 text-right font-num" data-testid="text-today-logged">{formatMinutes(logged)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 pt-3">
-        <p className="min-w-0 text-sm"><span className="text-muted-foreground">Next: </span><span className="font-medium" data-testid="text-next-action">{next.text}.</span></p>
-        {next.href && (
-          <Button size="sm" variant="secondary" asChild data-testid="button-next-action"><Link href={next.href}>{next.cta} <ArrowRight /></Link></Button>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export default function OverviewPage() {
@@ -143,9 +62,8 @@ export default function OverviewPage() {
   const planned = !!data.plan?.finalized || data.weekTasks.length > 0;
 
   // One contextual primary action.
-  // Review and focus prompts live in Today's plan; the header only nudges planning.
   const primary = reviewDue
-    ? null
+    ? { href: '/reviews?start=weekly', label: 'Start weekly review', test: 'button-start-review' }
     : !planned
       ? { href: '/planner?view=week', label: 'Plan this week', test: 'button-plan-week' }
       : null;
@@ -207,24 +125,28 @@ export default function OverviewPage() {
             </ul>
           )}
 
-          <TodayPlan focus={data.plan?.focus} reviewDue={reviewDue} />
-
           <MissedWork className="mb-4" />
 
           <DayAgenda day={today} />
 
           <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-border px-1 pt-4 text-sm">
-            <div className="col-span-3 sm:col-span-1 sm:col-start-2">
+            <div className="col-span-3 sm:col-span-1">
+              <dt className="text-xs text-muted-foreground">Week focus</dt>
+              <dd className="leading-snug" data-testid="text-week-focus">
+                {data.plan?.focus || <Link href="/planner?view=week" className="text-primary hover:underline">Set a focus</Link>}
+              </dd>
+            </div>
+            <div className="col-span-3 sm:col-span-1">
               <dt className="text-xs text-muted-foreground">Completed this week</dt>
               <dd className="font-num">{weekDone} of {data.weekTasks.length} planned</dd>
             </div>
             <div className="col-span-3 sm:col-span-1">
               <dt className="text-xs text-muted-foreground">Planned vs available time</dt>
-              <dd className={cn('font-num', data.effort > capacity && 'text-warning')}>
+              <dd className={cn('font-num', data.effort > capacity && 'text-destructive')}>
                 {Math.round(data.effort / 6) / 10}h of {Math.round(capacity / 6) / 10}h
               </dd>
               <div className="mt-1.5 h-1 w-full rounded-full bg-muted" aria-hidden>
-                <div className={cn('h-full origin-left rounded-full', data.effort > capacity ? 'bg-warning' : 'bg-primary')} style={{ transform: `scaleX(${Math.min(1, data.effort / Math.max(1, capacity))})` }} />
+                <div className={cn('h-full origin-left rounded-full', data.effort > capacity ? 'bg-destructive' : 'bg-primary')} style={{ transform: `scaleX(${Math.min(1, data.effort / Math.max(1, capacity))})` }} />
               </div>
             </div>
           </dl>
@@ -260,7 +182,6 @@ export default function OverviewPage() {
                           {h.metric && h.status !== 'not-started' && <span className="text-muted-foreground"> / {formatValue(measurementTargetAt(h.metric), h.metric.unit)}</span>}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs leading-snug text-foreground/80" data-testid={`text-pace-${g.id}`}>{getGoalPaceFeedback(g, today).recommendation}</p>
                       <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span className="min-w-0 truncate">
                           {h.metric ? h.metric.name : 'No result measure'} &middot; {ex.done} tasks done, last 14 days
@@ -283,21 +204,21 @@ export default function OverviewPage() {
               <summary className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <Info className="size-3.5" /> How to read this
               </summary>
-              <p className="mt-1">The bar is the result you logged. The thin tick shows where a steady path to the target date would be today. The line under it is a gentle suggestion, open the goal for the full picture. Completing tasks never changes a result.</p>
+              <p className="mt-1">The bar is the result you logged. The thin tick marks an even pace toward the target date, a reference point rather than a forecast. Completing tasks never changes a result.</p>
             </details>
           </section>
 
           <OverviewTimeCard />
 
           <section className="surface rise p-4 sm:p-5" style={{ animationDelay: '140ms' }} aria-labelledby="signals-h">
-            <h2 id="signals-h" className="mb-3 font-display text-xl">What needs a decision</h2>
+            <h2 id="signals-h" className="mb-3 font-display text-xl">Needs attention</h2>
             {data.insights.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nothing stands out. Plans and results look consistent.</p>
             ) : (
               <ul className="space-y-3">
                 {data.insights.map((i) => (
                   <li key={i.id} className="flex gap-3" data-testid={`insight-${i.id}`}>
-                    <span aria-hidden className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', i.tone === 'warning' ? 'bg-warning' : i.tone === 'positive' ? 'bg-success' : 'bg-warning')} />
+                    <span aria-hidden className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', i.tone === 'warning' ? 'bg-destructive' : i.tone === 'positive' ? 'bg-success' : 'bg-warning')} />
                     <div className="min-w-0 text-sm">
                       {(() => {
                         const goal = i.goalId ? state.goals.find((g) => g.id === i.goalId) : undefined;
@@ -332,7 +253,7 @@ export default function OverviewPage() {
                   <li key={m.id}>
                     <Link href={`/goals/${m.goal.id}`} className="flex min-h-10 items-center justify-between gap-3 py-1.5 text-sm hover:text-primary">
                       <span className="flex min-w-0 items-center gap-2"><AreaDot area={m.goal.area} goalId={m.goal.id} /><span className="truncate">{m.title}</span></span>
-                      <span className={cn('shrink-0 font-num text-xs', m.dueDate < today ? 'text-warning' : 'text-muted-foreground')}>{relDay(m.dueDate)}</span>
+                      <span className={cn('shrink-0 font-num text-xs', m.dueDate < today ? 'text-destructive' : 'text-muted-foreground')}>{relDay(m.dueDate)}</span>
                     </Link>
                   </li>
                 ))}

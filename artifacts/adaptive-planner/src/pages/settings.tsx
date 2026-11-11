@@ -198,7 +198,7 @@ export default function SettingsPage() {
         <Section title="How Align works">
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li>Reminders are in-app only. Align has no background notification service; due reminders appear on Overview and the Day plan when the app is open.</li>
-            <li>What needs a decision items come from simple rules using only your stored data. Hover the info icon to see the rule. There is no AI.</li>
+            <li>Needs attention items come from simple rules using only your stored data. Hover the info icon to see the rule. There is no AI.</li>
                       </ul>
         </Section>
       </div>

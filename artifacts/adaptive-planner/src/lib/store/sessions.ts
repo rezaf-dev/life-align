@@ -4,7 +4,7 @@ import { update } from './store';
 import type { AppState, MetricEntry, Recurrence } from './types';
 
 export interface SessionDraft {
-  title: string; goalId: string; metricId?: string; plannedDate?: string; plannedTime?: string;
+  title: string; goalId: string; metricId?: string; plannedDate?: string;
   plannedMinutes: number; recurrence: Recurrence; taskIds: string[]; notes: string;
   workDone?: string[];
 }
@@ -59,7 +59,7 @@ export function validateDraft(state: AppState, input: SessionDraft) {
 }
 export function buildSession(input: SessionDraft): WorkSession {
   return workSessionSchema.parse({ title: input.title.trim(), goalId: input.goalId, metricId: input.metricId || undefined,
-    plannedDate: input.plannedDate || undefined, plannedTime: input.plannedTime || undefined, plannedMinutes: input.plannedMinutes, recurrence: input.recurrence,
+    plannedDate: input.plannedDate || undefined, plannedMinutes: input.plannedMinutes, recurrence: input.recurrence,
     taskIds: input.taskIds, notes: input.notes, workDone: input.workDone, id: uid(), createdAt: nowStamp(), status: 'planned', allocations: [] });
 }
 export function saveWorkSession(input: SessionDraft, id?: string): string {

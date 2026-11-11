@@ -8,9 +8,9 @@ import { Field, FormDialog } from '@/components/form-dialog';
 import { addDaysIso, todayIso } from '@/lib/dates';
 import { addGoal, editGoalBasics, logMetric } from '@/lib/store/actions';
 import { formatValue, metricValueAt, measurementTargetAt } from '@/lib/store/selectors';
-import { AREAS, GOAL_CATEGORIES } from '@/lib/store/types';
+import { AREAS } from '@/lib/store/types';
 import { FrequencySelect, MeasurementStartField, PeriodCreditHint, isRecurring, type Frequency } from '@/components/measurement-period';
-import type { Area, Goal, GoalCategory, MetricKind, Priority } from '@/lib/store/types';
+import type { Area, Goal, MetricKind, Priority } from '@/lib/store/types';
 import { isMeasurementDate } from '@workspace/api-zod';
 
 export function AreaSelect({ value, onChange }: { value: Area; onChange: (a: Area) => void }) {
@@ -20,20 +20,6 @@ export function AreaSelect({ value, onChange }: { value: Area; onChange: (a: Are
       <SelectContent>
         {AREAS.map((a) => (
           <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-/** Kind of work a goal represents. Separate from Area (life domain); legacy goals show Other. */
-export function CategorySelect({ value, onChange }: { value: GoalCategory; onChange: (c: GoalCategory) => void }) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as GoalCategory)}>
-      <SelectTrigger data-testid="select-goal-category"><SelectValue /></SelectTrigger>
-      <SelectContent>
-        {GOAL_CATEGORIES.map((c) => (
-          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -57,7 +43,6 @@ const blank = () => ({
   title: '',
   outcome: '',
   area: 'business' as Area,
-  category: 'other' as GoalCategory,
   priority: 'medium' as Priority,
   targetDate: addDaysIso(todayIso(), 90),
   strategy: '',
@@ -97,7 +82,6 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           title: f.title,
           outcome: f.outcome,
           area: f.area,
-          category: f.category,
           priority: f.priority,
           targetDate: f.targetDate,
           strategy: f.strategy,
@@ -127,7 +111,6 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Area"><AreaSelect value={f.area} onChange={(v) => set('area', v)} /></Field>
-        <Field label="Category" hint="The type of work, used to group time and tasks."><CategorySelect value={f.category} onChange={(v) => set('category', v)} /></Field>
         <Field label="Priority"><PrioritySelect value={f.priority} onChange={(v) => set('priority', v)} /></Field>
         <Field label="Target date" htmlFor="goal-target">
           <Input id="goal-target" type="date" value={f.targetDate} onChange={(e) => set('targetDate', e.target.value)} data-testid="input-goal-target" />
@@ -160,9 +143,9 @@ export function NewGoalDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 }
 
 export function EditGoalDialog({ goal, open, onOpenChange }: { goal: Goal; open: boolean; onOpenChange: (o: boolean) => void }) {
-  const [f, setF] = useState({ title: goal.title, outcome: goal.outcome, area: goal.area, category: (goal.category ?? 'other') as GoalCategory, priority: goal.priority });
+  const [f, setF] = useState({ title: goal.title, outcome: goal.outcome, area: goal.area, priority: goal.priority });
   useEffect(() => {
-    if (open) setF({ title: goal.title, outcome: goal.outcome, area: goal.area, category: (goal.category ?? 'other') as GoalCategory, priority: goal.priority });
+    if (open) setF({ title: goal.title, outcome: goal.outcome, area: goal.area, priority: goal.priority });
   }, [open, goal]);
   return (
     <FormDialog
@@ -184,7 +167,6 @@ export function EditGoalDialog({ goal, open, onOpenChange }: { goal: Goal; open:
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Area"><AreaSelect value={f.area} onChange={(v) => setF({ ...f, area: v })} /></Field>
-        <Field label="Category" hint="The type of work this goal represents."><CategorySelect value={f.category} onChange={(v) => setF({ ...f, category: v })} /></Field>
         <Field label="Priority"><PrioritySelect value={f.priority} onChange={(v) => setF({ ...f, priority: v })} /></Field>
       </div>
     </FormDialog>

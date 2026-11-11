@@ -90,7 +90,6 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
   const [title, setTitle] = useState(session?.title ?? '');
   const [metricId, setMetricId] = useState(session?.metricId ?? (session ? NONE : timeMetrics(goal)[0]?.id ?? NONE));
   const [plannedDate, setPlannedDate] = useState(session ? session.plannedDate ?? '' : date ?? todayIso());
-  const [plannedTime, setPlannedTime] = useState(session?.plannedTime ?? '');
   const [minutes, setMinutes] = useState(String(session?.plannedMinutes ?? 60));
   const [recurrence, setRecurrence] = useState<Recurrence>((session?.recurrence as Recurrence) ?? 'none');
   const [taskIds, setTaskIds] = useState<string[]>(session?.taskIds ?? []);
@@ -110,7 +109,7 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
     setPending(true); setError('');
     try {
       if (!applied.current) {
-        saveWorkSession({ title, goalId: gid, metricId: metricId === NONE || general ? undefined : metricId, plannedDate: plannedDate || undefined, plannedTime: plannedDate && plannedTime ? plannedTime : undefined,
+        saveWorkSession({ title, goalId: gid, metricId: metricId === NONE || general ? undefined : metricId, plannedDate: plannedDate || undefined,
           plannedMinutes: n, recurrence, taskIds: taskIds.filter((id) => goalTasks.some((t) => t.id === id)), notes }, session?.id);
         applied.current = true; setStaged(true);
       }
@@ -131,9 +130,6 @@ export function PlanSessionDialog({ session, goalId, date, onClose }: { session?
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Planned date" htmlFor="session-date" hint="Leave empty to keep it unscheduled.">
           <Input id="session-date" type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)} disabled={frozen} className="font-num" data-testid="input-session-date" />
-        </Field>
-        <Field label="Start time (optional)" htmlFor="session-time" hint="A planned clock time, not recorded work.">
-          <Input id="session-time" type="time" value={plannedTime} onChange={(e) => setPlannedTime(e.target.value)} disabled={frozen || !plannedDate} className="font-num" data-testid="input-session-time" />
         </Field>
         <Field label="Reserved minutes" htmlFor="session-minutes" hint={n > 0 ? mins(n) : undefined}>
           <Input id="session-minutes" type="number" min={0} max={1440} step="any" value={minutes} onChange={(e) => setMinutes(e.target.value)} disabled={frozen} className="font-num" data-testid="input-session-minutes" />
@@ -531,7 +527,7 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
   const parent = remainderPiece ? state.sessions?.find((x) => x.id === s.continuationOfId) : undefined;
   return (
     <li className={cn('grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-2.5', isSkipped && 'opacity-70')} data-testid={`row-session-${s.id}`}>
-      <div className={cn('flex flex-col items-center rounded-lg px-1 py-1 text-center', isLogged ? 'bg-success/10 text-success' : isSkipped ? 'bg-muted text-muted-foreground' : missed ? 'border border-warning/30 bg-warning/5 text-warning' : 'border border-dashed border-foreground/30 text-foreground')}>
+      <div className={cn('flex flex-col items-center rounded-lg px-1 py-1 text-center', isLogged ? 'bg-success/10 text-success' : isSkipped ? 'bg-muted text-muted-foreground' : missed ? 'border border-destructive/40 text-destructive' : 'border border-dashed border-foreground/30 text-foreground')}>
         <span className={cn('font-num text-sm leading-tight', isSkipped && 'line-through')} data-testid={isLogged ? `text-session-actual-${s.id}` : `text-session-minutes-${s.id}`}>{mins(minutes)}</span>
         <span className="flex flex-wrap items-center justify-center gap-0.5 text-[0.65rem] leading-tight" data-testid={`status-session-${s.id}`}>
           {isLogged ? <Check className="size-2.5" aria-hidden /> : <Clock3 className="size-2.5" aria-hidden />}{statusText}
@@ -545,7 +541,6 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
           {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} goalId={g.id} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>{GENERAL_LABEL}</span>)}
           {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
-          {isPlanned && s.plannedTime && <span className="font-num" data-testid={`text-session-time-${s.id}`}>planned {s.plannedTime}</span>}
           {isPlanned && <span>{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} task${s.taskIds.length > 1 ? 's' : ''}` : ''}</span>}
           {isSkipped && <span>No time credited</span>}
           {shortClosed && <span className="font-num" data-testid={`text-session-compare-${s.id}`}>{mins(s.actualMinutes ?? 0)} of {mins(origPlanned)} planned</span>}

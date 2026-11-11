@@ -44,15 +44,13 @@ export function replanMissedTask(id: string, date: string) {
   });
 }
 
-export function replanMissedSession(id: string, date: string, time?: string) {
+export function replanMissedSession(id: string, date: string) {
   validateReplan(date);
-  if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('Choose a valid time.');
   update((state) => {
     const session = state.sessions?.find((s) => s.id === id);
     if (!session || session.status !== 'planned') throw new Error('This session is no longer planned.');
     guardTimer(state, 'session', id);
     session.plannedDate = date;
-    if (time !== undefined) session.plannedTime = time || undefined;
   });
 }
 

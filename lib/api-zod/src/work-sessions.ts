@@ -10,7 +10,6 @@ export const workSessionSchema = z.object({
   timeIntervals: z.array(z.object({ start: z.string().datetime(), end: z.string().datetime() })).min(1).max(2000).optional(),
   timezone: z.string().refine((zone) => { try { new Intl.DateTimeFormat('en', { timeZone: zone }); return true; } catch { return false; } }, 'Choose a valid time zone.').optional(),
   metricId: z.string().optional(), plannedDate: date.optional(),
-  plannedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Choose a valid planned time.').optional(),
   plannedMinutes: z.number().finite().min(0).max(1440),
   originalPlannedMinutes: z.number().finite().positive().max(1440).optional(),
   continuationOfId: z.string().optional(), remainderSessionId: z.string().optional(),

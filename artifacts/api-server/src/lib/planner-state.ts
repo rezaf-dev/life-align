@@ -29,7 +29,6 @@ const metric = z.object({
 const goal = z.object({
   id, title: text, outcome: text, area: z.enum(['business', 'fitness', 'english', 'personal']),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
-  category: z.enum(['client-work', 'product-build', 'learning', 'sales-outreach', 'admin', 'personal', 'other']).optional(),
   priority, targetDate: text, status: z.enum(['active', 'paused', 'completed', 'cancelled']),
   strategy: z.object({ summary: text, rationale: text, updatedAt: text }).passthrough(),
   milestones: z.array(milestone), metrics: z.array(metric), history: z.array(history),
@@ -65,11 +64,7 @@ export const stateSchema = z.object({
   periodNotes: z.record(text, text),
   reviews: z.array(z.object({
     id, type: z.enum(['weekly', 'monthly']), periodStart: text, periodEnd: text, createdAt: text,
-    answers: z.object({
-      wins: text, misses: text, learned: text, change: text, focus: text,
-      carryoverTaskIds: z.array(id).max(30000).optional(),
-      mondayCommitment: text.optional(),
-    }),
+    answers: z.object({ wins: text, misses: text, learned: text, change: text, focus: text }),
     snapshot: z.object({
       committed: z.number(), committedDone: z.number(), extraDone: z.number(), overdue: z.number(),
       metrics: z.array(z.object({

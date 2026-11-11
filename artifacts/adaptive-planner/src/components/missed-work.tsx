@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarClock, Check, Clock3, ListTodo, Repeat } from 'lucide-react';
-import { LogSessionDialog } from '@/components/work-sessions';
+import { CalendarClock, Clock3, ListTodo, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FormDialog } from '@/components/form-dialog';
@@ -18,9 +17,9 @@ const PREVIEW = 4;
 
 type Item =
   | { kind: 'task'; id: string; title: string; date: string; minutes?: number; goalId?: string; recurring: boolean; recurrence: string }
-  | { kind: 'session'; id: string; title: string; date: string; time?: string; minutes?: number; goalId?: string; recurring: boolean; recurrence: string; session: WorkSession };
+  | { kind: 'session'; id: string; title: string; date: string; minutes?: number; goalId?: string; recurring: boolean; recurrence: string };
 
-type Pending = { item: Item; mode: 'today' | 'replan' | 'skip' | 'done' };
+type Pending = { item: Item; mode: 'today' | 'replan' | 'skip' };
 
 const fromTask = (t: Task): Item => ({
   kind: 'task', id: t.id, title: t.title, date: t.plannedDate ?? t.dueDate ?? '',
@@ -28,7 +27,7 @@ const fromTask = (t: Task): Item => ({
   recurring: !!t.recurrence && t.recurrence !== 'none', recurrence: String(t.recurrence ?? 'none'),
 });
 const fromSession = (s: WorkSession): Item => ({
-  kind: 'session', id: s.id, title: s.title, date: s.plannedDate ?? '', time: s.plannedTime, session: s, minutes: s.plannedMinutes, goalId: s.goalId,
+  kind: 'session', id: s.id, title: s.title, date: s.plannedDate ?? '', minutes: s.plannedMinutes, goalId: s.goalId,
   recurring: !!s.recurrence && s.recurrence !== 'none', recurrence: String(s.recurrence ?? 'none'),
 });
 
@@ -44,22 +43,20 @@ export function MissedWork({ className }: { className?: string }) {
     return [...m.tasks.map(fromTask), ...m.sessions.map(fromSession)].sort((a, b) => a.date.localeCompare(b.date));
   }, [state.tasks, state.sessions, today]);
 
-  const dialog = pending && pending.mode === 'done' && pending.item.kind === 'session'
-    ? <LogSessionDialog key={`${pending.item.id}-done`} session={pending.item.session} date={pending.item.date || today} onClose={() => setPending(null)} />
-    : pending && <MissedDialog key={`${pending.item.id}-${pending.mode}`} pending={pending} onClose={() => setPending(null)} />;
+  const dialog = pending && <MissedDialog key={`${pending.item.id}-${pending.mode}`} pending={pending} onClose={() => setPending(null)} />;
   // Keep the dialog mounted after the list empties so save errors and retry stay visible.
   if (items.length === 0) return dialog || null;
   const visible = showAll ? items : items.slice(0, PREVIEW);
   const hidden = items.length - visible.length;
 
   return (
-    <section className={cn('rounded-xl border border-warning/25 bg-warning/[0.05] p-3 sm:p-4', className)} aria-labelledby="missed-h" data-testid="panel-missed-work">
+    <section className={cn('rounded-xl border border-destructive/25 bg-destructive/[0.04] p-3 sm:p-4', className)} aria-labelledby="missed-h" data-testid="panel-missed-work">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2 px-1">
         <h2 id="missed-h" className="flex items-center gap-2 font-display text-lg">
-          <CalendarClock className="size-4 text-warning" aria-hidden /> Still waiting for you
+          <CalendarClock className="size-4 text-destructive" aria-hidden /> Missed
           <span className="font-num text-xs text-muted-foreground" data-testid="text-missed-count">{items.length}</span>
         </h2>
-        <p className="text-xs text-muted-foreground">Nothing is lost. Give each one a new day, log what you did, or let it go.</p>
+        <p className="text-xs text-muted-foreground">Stays here until you move it to a new day or skip it.</p>
       </div>
       <ul className="divide-y divide-border/60" data-testid="list-missed-work">
         {visible.map((it) => (
@@ -80,24 +77,22 @@ function MissedRow({ item: it, goal, onAct }: { item: Item; goal?: Goal; onAct: 
   const Icon = it.kind === 'task' ? ListTodo : Clock3;
   return (
     <li className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 gap-y-1.5 py-2.5 sm:grid-cols-[1.5rem_minmax(0,1fr)_auto] sm:items-center" data-testid={`row-missed-${it.kind}-${it.id}`}>
-      <Icon className="mt-0.5 size-4 text-warning/80 sm:mt-0" aria-label={it.kind === 'task' ? 'Task' : 'Planned session'} />
+      <Icon className="mt-0.5 size-4 text-destructive/80 sm:mt-0" aria-label={it.kind === 'task' ? 'Task' : 'Planned session'} />
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-[0.93rem] leading-snug">
           <span className="min-w-0 break-words" data-testid={`text-missed-title-${it.id}`}>{it.title}</span>
           {it.recurring && <Repeat className="size-3 shrink-0 text-muted-foreground" aria-label={`Repeats ${it.recurrence}`} />}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="font-medium text-warning">{it.kind === 'task' ? 'Task from earlier' : 'Session from earlier'}</span>
+          <span className="font-medium text-destructive">{it.kind === 'task' ? 'Missed task' : 'Missed session'}</span>
           <span className="font-num" data-testid={`text-missed-date-${it.id}`}>{it.date ? (it.date === addDaysIso(todayIso(), -1) ? `Yesterday · ${fmt(it.date, 'MMM d')}` : fmt(it.date, 'MMM d')) : 'No date'}</span>
-          {it.kind === 'session' && it.time && <span className="font-num">{it.time}</span>}
           {!!it.minutes && <span className="font-num">{formatMinutes(it.minutes)}</span>}
           {goal ? <span className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5"><AreaDot area={goal.area} goalId={goal.id} /><span className="truncate">{goal.title}</span></span> : <span>No goal</span>}
         </div>
       </div>
       <div className="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
-        <Button size="sm" variant="secondary" className="h-9 px-2.5 text-xs" onClick={() => onAct('today')} data-testid={`button-missed-today-${it.id}`}>{it.kind === 'session' ? 'Move to today' : 'Do today'}</Button>
-        <Button size="sm" variant="ghost" className="h-9 px-2.5 text-xs" onClick={() => onAct('replan')} data-testid={`button-missed-replan-${it.id}`}>{it.kind === 'session' ? 'Reschedule' : 'Replan'}</Button>
-        {it.kind === 'session' && <Button size="sm" variant="ghost" className="h-9 px-2.5 text-xs" onClick={() => onAct('done')} data-testid={`button-missed-done-${it.id}`}><Check /> Mark done with actual time</Button>}
+        <Button size="sm" variant="secondary" className="h-9 px-2.5 text-xs" onClick={() => onAct('today')} data-testid={`button-missed-today-${it.id}`}>Do today</Button>
+        <Button size="sm" variant="ghost" className="h-9 px-2.5 text-xs" onClick={() => onAct('replan')} data-testid={`button-missed-replan-${it.id}`}>Replan</Button>
         <Button size="sm" variant="ghost" className="h-9 px-2.5 text-xs text-muted-foreground" onClick={() => onAct('skip')} data-testid={`button-missed-skip-${it.id}`}>Skip</Button>
       </div>
     </li>
@@ -107,16 +102,15 @@ function MissedRow({ item: it, goal, onAct }: { item: Item; goal?: Goal; onAct: 
 function MissedDialog({ pending: { item: it, mode }, onClose }: { pending: Pending; onClose: () => void }) {
   const today = todayIso();
   const [date, setDate] = useState(mode === 'today' ? today : addDaysIso(today, 1));
-  const [time, setTime] = useState(it.kind === 'session' ? it.time ?? '' : '');
   const action = useStagedAction();
   const label = it.kind === 'task' ? 'task' : 'session';
   const validDate = !!date && date >= today;
   const apply = () => {
     if (mode === 'skip') return it.kind === 'task' ? skipMissedTask(it.id) : skipMissedSession(it.id);
-    return it.kind === 'task' ? replanMissedTask(it.id, date) : replanMissedSession(it.id, date, mode === 'replan' ? time : undefined);
+    return it.kind === 'task' ? replanMissedTask(it.id, date) : replanMissedSession(it.id, date);
   };
-  const title = mode === 'skip' ? `Skip this ${label}?` : mode === 'today' ? 'Move to today' : it.kind === 'session' ? 'Reschedule session' : 'Replan task';
-  const submit = mode === 'skip' ? 'Skip' : mode === 'today' ? 'Move to today' : it.kind === 'session' ? 'Reschedule' : 'Replan';
+  const title = mode === 'skip' ? `Skip this ${label}?` : mode === 'today' ? 'Do it today' : `Replan ${label}`;
+  const submit = mode === 'skip' ? 'Skip' : mode === 'today' ? 'Move to today' : 'Replan';
   return (
     <FormDialog
       open
@@ -131,12 +125,6 @@ function MissedDialog({ pending: { item: it, mode }, onClose }: { pending: Pendi
         <div>
           <label htmlFor="missed-date" className="mb-1 block text-xs text-muted-foreground">New date (today or later)</label>
           <Input id="missed-date" type="date" min={today} value={date} disabled={action.frozen} onChange={(e) => setDate(e.target.value)} className="h-10 font-num" data-testid="input-missed-date" />
-          {it.kind === 'session' && (
-            <>
-              <label htmlFor="missed-time" className="mb-1 mt-3 block text-xs text-muted-foreground">Time (optional)</label>
-              <Input id="missed-time" type="time" value={time} disabled={action.frozen} onChange={(e) => setTime(e.target.value)} className="h-10 w-36 font-num" data-testid="input-missed-time" />
-            </>
-          )}
         </div>
       )}
       {mode === 'today' && <p className="text-sm text-muted-foreground">It moves to today's plan. Nothing is marked done.</p>}

@@ -459,7 +459,6 @@ export function ProposalView({
   busy: boolean;
 }) {
   const r = useResolver(proposal.operations);
-  const [confirming, setConfirming] = useState(false);
   const locked = proposal.status !== 'pending' || applying;
   const sel = new Set(proposal.selected);
   const chosen = proposal.operations.filter((o) => sel.has(o.key));
@@ -522,27 +521,13 @@ export function ProposalView({
         </div>
       )}
       {missing.length > 0 && <p className="mt-2 text-xs text-destructive">Add a reason for {missing.length} change{missing.length === 1 ? '' : 's'} to existing records.</p>}
-      {confirming && !applying ? (
-        <div className="mt-2.5 rounded-lg border border-border bg-card p-2.5" role="group" aria-label="Confirm changes" data-testid="panel-confirm-proposal">
-          <p className="text-sm font-medium">Apply {chosen.length} change{chosen.length === 1 ? '' : 's'} to your workspace?</p>
-          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-            {chosen.map((o) => <li key={o.key} className="flex gap-1.5"><span aria-hidden>-</span><span className="min-w-0 break-words">{OP_LABEL[o.type]}{o.title ? `: ${o.title}` : ''}</span></li>)}
-          </ul>
-          <p className="mt-1.5 text-xs text-muted-foreground">They are saved together. If anything changed meanwhile, nothing is overwritten.</p>
-          <div className="mt-2 flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} data-testid="button-cancel-confirm-proposal">Back</Button>
-            <Button size="sm" onClick={() => { setConfirming(false); onApprove(); }} disabled={busy || chosen.length === 0 || missing.length > 0} data-testid="button-confirm-proposal"><Check /> Yes, apply</Button>
-          </div>
-        </div>
-      ) : (
       <div className="mt-2.5 flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onReject} disabled={applying} data-testid="button-reject-proposal">Decline</Button>
-        <Button size="sm" onClick={() => setConfirming(true)} disabled={applying || busy || chosen.length === 0 || missing.length > 0} data-testid="button-approve-proposal">
+        <Button size="sm" onClick={onApprove} disabled={applying || busy || chosen.length === 0 || missing.length > 0} data-testid="button-approve-proposal">
           {applying ? <Loader2 className="animate-spin" /> : <Check />}
-          {applying ? 'Applying' : `Review ${chosen.length} to apply`}
+          {applying ? 'Applying' : `Apply ${chosen.length}`}
         </Button>
       </div>
-      )}
     </div>
   );
 }
