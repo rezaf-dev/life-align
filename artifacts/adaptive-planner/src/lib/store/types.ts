@@ -77,6 +77,7 @@ export interface HistoryEvent {
 
 export interface Goal {
   id: string;
+  color?: string;
   title: string;
   outcome: string;
   area: Area;

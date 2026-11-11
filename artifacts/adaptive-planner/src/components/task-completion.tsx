@@ -251,7 +251,7 @@ function CompletionForm({ task, goal, onClose }: { task: Task; goal: Goal; onClo
               data-testid="link-complete-goal"
             >
               <Target className="size-3.5 shrink-0" />
-              <AreaDot area={goal.area} />
+              <AreaDot area={goal.area} goalId={goal.id} />
               <span className="truncate">{goal.title}</span>
             </Link>
           </div>

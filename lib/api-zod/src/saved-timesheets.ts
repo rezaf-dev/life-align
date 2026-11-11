@@ -5,7 +5,7 @@ import { timeUnitMinutes, workDoneListSchema } from './work-sessions';
 const date = z.string().refine(isMeasurementDate, 'Choose a real date.');
 export const timesheetSnapshotSchema = z.object({
   goalId: z.string().min(1), goalTitle: z.string().trim().min(1).max(500),
-  metricId: z.string().min(1), metricName: z.string().trim().min(1).max(500),
+  metricId: z.string(), metricName: z.string().trim().min(1).max(500),
   unit: z.string().refine((unit) => timeUnitMinutes(unit) !== null, 'Choose a time measure.'),
   start: date, end: date,
   rows: z.array(z.object({

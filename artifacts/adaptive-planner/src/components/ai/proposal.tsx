@@ -85,9 +85,9 @@ function useResolver(ops: Operation[]) {
     const goal = (id?: string) => {
       if (!id) return undefined;
       const g = state.goals.find((x) => x.id === id);
-      if (g) return { title: g.title, area: g.area as Area, isNew: false };
+      if (g) return { title: g.title, area: g.area as Area, isNew: false, goalId: g.id };
       const o = byKey.get(id);
-      if (o?.type === 'create_goal') return { title: o.title || 'New goal', area: (o.area || 'personal') as Area, isNew: true };
+      if (o?.type === 'create_goal') return { title: o.title || 'New goal', area: (o.area || 'personal') as Area, isNew: true, goalId: undefined };
       return undefined;
     };
     const task = (id?: string) => {
@@ -377,7 +377,7 @@ function OpCard({
           {(meta.length > 0 || goal || parent || ms) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               {goal && op.type !== 'update_goal' && op.type !== 'create_strategy' && op.type !== 'update_strategy' && (
-                <span className="inline-flex items-center gap-1"><AreaDot area={goal.area} />{goal.title}</span>
+                <span className="inline-flex items-center gap-1"><AreaDot area={goal.area} goalId={goal.goalId} />{goal.title}</span>
               )}
               {ms && <span>{ms.title}</span>}
               {parent && <span>under {parent.title}</span>}

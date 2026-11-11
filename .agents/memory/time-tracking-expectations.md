@@ -50,3 +50,9 @@ Time-of-day reports must distinguish known clock intervals from duration-only or
 **Why:** The approved first version uses real working intervals and explicitly avoids guessing when work happened or judging untracked time.
 
 **How to apply:** Retain local timezone and genuine timer/manual-clock intervals. If reviewed duration or date no longer matches an interval, keep the corrected actual duration but leave its clock position unspecified. Do not infer positions from creation timestamps.
+
+Goal-linked recorded time belongs in client timesheets even when it contributes to no measure. Work-done details must be readable and quickly copyable from logged entries without opening an edit form.
+
+**Why:** The user explicitly requested both behaviors after using optional time tracking.
+
+**How to apply:** Default new timesheets to all recorded work for the goal, with narrower time-measure filters optional. Keep unrelated general work out, preserve previously saved snapshots, and copy public work descriptions only, not private notes.

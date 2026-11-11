@@ -165,12 +165,12 @@ export default function TimePage() {
                           <li key={g.goalId || 'general'} data-testid={`row-time-goal-${g.goalId || 'general'}`}>
                             <div className="flex items-baseline justify-between gap-3 text-sm">
                               <span className="flex min-w-0 items-center gap-2">
-                                {goal ? <AreaDot area={goal.area} /> : <span aria-hidden className="size-2 shrink-0 rounded-full border border-muted-foreground/60" />}
+                                {goal ? <AreaDot area={goal.area} goalId={goal.id} /> : <span aria-hidden className="size-2 shrink-0 rounded-full border border-muted-foreground/60" />}
                                 {goal ? <Link href={`/goals/${goal.id}`} className="truncate hover:underline">{g.title}</Link> : <span className="truncate">{g.goalId ? g.title : GENERAL_LABEL}</span>}
                               </span>
                               <span className="shrink-0 font-num">{m(g.minutes)}</span>
                             </div>
-                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden><div className="h-full rounded-full bg-primary/80" style={{ width: `${(g.minutes / goalMax) * 100}%` }} /></div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden><div className={cn('h-full rounded-full', !goal?.color && 'bg-muted-foreground')} style={{ backgroundColor: goal?.color, width: `${(g.minutes / goalMax) * 100}%` }} /></div>
                             <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                               {g.plannedMinutes > 0 && <span className="font-num">{m(g.plannedMinutes)} reserved</span>}
                               {g.completedTasks > 0 && <span className="font-num">{g.completedTasks} task{g.completedTasks > 1 ? 's' : ''} done</span>}
@@ -249,7 +249,7 @@ export default function TimePage() {
                           <span className="w-16 shrink-0 font-num text-xs text-muted-foreground">{s.date ? fmt(s.date, 'EEE d') : ''}</span>
                           <div className="min-w-0 flex-1 basis-40">
                             <span className="block truncate text-sm">{s.title}</span>
-                            <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{goal && <AreaDot area={goal.area} />}{goal?.title ?? GENERAL_LABEL}{!s.timeIntervals?.length && <span>· time of day unspecified</span>}</span>
+                            <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{goal && <AreaDot area={goal.area} goalId={goal.id} />}{goal?.title ?? GENERAL_LABEL}{!s.timeIntervals?.length && <span>· time of day unspecified</span>}</span>
                             <WorkDonePreview items={sessionWorkDone(s).all} testId={`time-${s.id}`} />
                           </div>
                           <span className="font-num text-sm">{m(s.actualMinutes ?? 0)}</span>

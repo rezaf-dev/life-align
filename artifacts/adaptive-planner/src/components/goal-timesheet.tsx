@@ -19,32 +19,24 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
   const state = useAppState();
   const { toast } = useToast();
   const timeMetrics = goal.metrics.filter((m) => timeUnitMinutes(m.unit) != null);
-  const [metricId, setMetricId] = useState(timeMetrics[0]?.id ?? '');
+  const [metricId, setMetricId] = useState('');
   const [client, setClient] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   const [includeNotes, setIncludeNotes] = useState(false);
   const [saving, setSaving] = useState(false);
-  const activeId = timeMetrics.some((m) => m.id === metricId) ? metricId : timeMetrics[0]?.id ?? '';
-  const sheet = useMemo(() => (activeId ? buildTimesheet(state, goal, activeId, start, end) : null), [state, goal, activeId, start, end]);
-
-  if (timeMetrics.length === 0) {
-    return (
-      <Disclosure>
-        <EmptyState className="py-6" title="No time measure on this goal" body="Add a result measure in hours or minutes to produce a timesheet of the work logged against it." />
-      </Disclosure>
-    );
-  }
+  const activeId = timeMetrics.some((m) => m.id === metricId) ? metricId : '';
+  const sheet = useMemo(() => buildTimesheet(state, goal, activeId, start, end), [state, goal, activeId, start, end]);
   const empty = !sheet || sheet.rows.length === 0;
   const opts = { client: client.trim() || undefined, preparedBy: preparedBy.trim() || undefined, includeNotes };
 
   return (
     <Disclosure>
-      <p className="-mt-2 mb-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">Only recorded work credited to the chosen measure. Estimates and planned sessions are left out, corrections show as signed adjustments, and absolute checkpoints are not billable time. Nothing is sent; you print or download it yourself.</p>
+      <p className="-mt-2 mb-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">All recorded work on this goal is included by default, even without a measure. You can narrow it to one time measure below. Estimates and planned sessions are left out, and absolute checkpoints are not billable time. Nothing is sent; you print or download it yourself.</p>
       <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-        <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Time measure
-          <Select value={activeId} onValueChange={setMetricId}>
+        <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Work to include
+          <Select value={activeId || '__all_work__'} onValueChange={(v) => setMetricId(v === '__all_work__' ? '' : v)}>
             <SelectTrigger className="h-10" data-testid="select-timesheet-metric"><SelectValue /></SelectTrigger>
-            <SelectContent>{timeMetrics.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}</SelectContent>
+            <SelectContent><SelectItem value="__all_work__">All recorded work</SelectItem>{timeMetrics.map((m) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit}) only</SelectItem>)}</SelectContent>
           </Select>
         </label>
         <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">Client (optional)
@@ -60,7 +52,7 @@ export function TimesheetPanel({ goal, start, end }: { goal: Goal; start: string
       </label>
 
       {empty ? (
-        <EmptyState className="py-6" title="No recorded time in this range" body="Log sessions against this measure, or widen the dates." />
+        <EmptyState className="py-6" title="No recorded time in this range" body="Log time on this goal, choose all recorded work, or widen the dates." />
       ) : (
         <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[520px] text-sm" data-testid="table-timesheet">

@@ -28,6 +28,21 @@ beforeEach(() => {
     { date: '2024-01-15', actualMinutes: 90, allocations: [], workDone: ['Built email templates'] });
 });
 
+test('all-work snapshots save, reload and export unmeasured time without changing source logs', () => {
+  recordUnplannedSession({ title: 'Time-only work', goalId, plannedMinutes: 0, recurrence: 'none', taskIds: [], notes: 'DO_NOT_EXPORT' },
+    { date: '2024-01-15', actualMinutes: 30, allocations: [], workDone: ['Client handover'] });
+  const input = draft();
+  input.sheet = buildTimesheet(state(), state().goals.find((g) => g.id === goalId)!, '', '2024-01-01', '2024-01-31');
+  const id = saveTimesheetReport(input);
+  hydrateState(stateSchema.parse(structuredClone(state())));
+  assert.equal(report(id).sheet.metricId, '');
+  assert.equal(report(id).sheet.totalMinutes, 120);
+  const exported = timesheetReportExport(report(id));
+  assert.ok(timesheetHtml(exported.sheet, exported.options).includes('Client handover'));
+  assert.ok(!timesheetHtml(exported.sheet, exported.options).includes('DO_NOT_EXPORT'));
+  assert.equal(state().sessions!.length, 2);
+});
+
 test('a saved timesheet is a durable independent snapshot, not a live link to time logs', () => {
   const input = draft();
   const id = saveTimesheetReport(input);

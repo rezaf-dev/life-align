@@ -80,7 +80,7 @@ export function TimerBar({ onFinish, onDiscard, finishError, finishPending }: { 
         <div className="min-w-0 flex-1 basis-40">
           <div className="truncate text-sm" data-testid="text-timer-title">{timer.title}</div>
           <div className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-            {goal && <><AreaDot area={goal.area} /> <span className="truncate">{goal.title}</span> · </>}
+            {goal && <><AreaDot area={goal.area} goalId={goal.id} /> <span className="truncate">{goal.title}</span> · </>}
             <span className="shrink-0" title={running ? 'Keeps counting in the background until paused' : undefined} data-testid="status-timer">{running ? 'Running' : 'Paused'}</span>
           </div>
         </div>

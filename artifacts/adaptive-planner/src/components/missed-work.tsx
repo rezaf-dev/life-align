@@ -87,7 +87,7 @@ function MissedRow({ item: it, goal, onAct }: { item: Item; goal?: Goal; onAct: 
           <span className="font-medium text-destructive">{it.kind === 'task' ? 'Missed task' : 'Missed session'}</span>
           <span className="font-num" data-testid={`text-missed-date-${it.id}`}>{it.date ? (it.date === addDaysIso(todayIso(), -1) ? `Yesterday · ${fmt(it.date, 'MMM d')}` : fmt(it.date, 'MMM d')) : 'No date'}</span>
           {!!it.minutes && <span className="font-num">{formatMinutes(it.minutes)}</span>}
-          {goal ? <span className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5"><AreaDot area={goal.area} /><span className="truncate">{goal.title}</span></span> : <span>No goal</span>}
+          {goal ? <span className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5"><AreaDot area={goal.area} goalId={goal.id} /><span className="truncate">{goal.title}</span></span> : <span>No goal</span>}
         </div>
       </div>
       <div className="col-start-2 flex flex-wrap gap-1 sm:col-start-3">

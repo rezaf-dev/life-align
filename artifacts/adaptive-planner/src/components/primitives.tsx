@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import type { Area, GoalStatus } from '@/lib/store/types';
 import { areaLabel } from '@/lib/store/types';
 import type { Health } from '@/lib/store/selectors';
+import { useAppState } from '@/lib/store/store';
 
 export const areaBg: Record<Area, string> = {
   business: 'bg-area-business',
@@ -17,14 +18,15 @@ export const areaText: Record<Area, string> = {
   personal: 'text-area-personal',
 };
 
-export function AreaDot({ area, className }: { area: Area; className?: string }) {
-  return <span aria-hidden className={cn('inline-block size-2 shrink-0 rounded-full', areaBg[area], className)} />;
+export function AreaDot({ area, goalId, className }: { area: Area; goalId?: string; className?: string }) {
+  const color = useAppState().goals.find((g) => g.id === goalId)?.color;
+  return <span aria-hidden style={color ? { backgroundColor: color } : undefined} className={cn('inline-block size-2 shrink-0 rounded-full', !color && areaBg[area], className)} />;
 }
 
-export function AreaTag({ area }: { area: Area }) {
+export function AreaTag({ area, goalId }: { area: Area; goalId?: string }) {
   return (
-    <span className={cn('eyebrow inline-flex items-center gap-1.5 !text-[0.66rem]', areaText[area])}>
-      <AreaDot area={area} />
+    <span className={cn('eyebrow inline-flex items-center gap-1.5 !text-[0.66rem]', goalId ? 'text-muted-foreground' : areaText[area])}>
+      <AreaDot area={area} goalId={goalId} />
       {areaLabel(area)}
     </span>
   );
@@ -92,18 +94,21 @@ export function PaceBar({
   progress,
   expected,
   area,
+  goalId,
   className,
 }: {
   progress: number;
   expected?: number;
   area: Area;
+  goalId?: string;
   className?: string;
 }) {
+  const color = useAppState().goals.find((g) => g.id === goalId)?.color;
   return (
     <div className={cn('relative h-1.5 w-full rounded-full bg-muted', className)}>
       <div
-        className={cn('absolute inset-y-0 left-0 rounded-full origin-left transition-transform duration-700', areaBg[area])}
-        style={{ width: '100%', transform: `scaleX(${Math.max(0.015, progress)})` }}
+        className={cn('absolute inset-y-0 left-0 rounded-full origin-left transition-transform duration-700', !color && areaBg[area])}
+        style={{ backgroundColor: color, width: '100%', transform: `scaleX(${Math.max(0.015, progress)})` }}
       />
       {expected !== undefined && (
         <div

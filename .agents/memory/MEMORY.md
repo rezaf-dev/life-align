@@ -2,3 +2,4 @@
 - [Responsive expanded states](responsive-expanded-states.md) — verify mobile width with histories expanded, not just the initial page.
 - [Time tracking and timesheets](time-tracking-expectations.md) — optional timers, work-done capture, private report notes, and saved-timesheet/payment boundaries.
 - [Missed work decisions](missed-work-expectations.md) — visible replan/skip decisions; skipping is not completion or time worked, and recurrence must not create catch-up backlogs.
+- [Goal color identity](goal-colors.md) — individual goals need stable unique colors across planning and reports, independent of area and status.

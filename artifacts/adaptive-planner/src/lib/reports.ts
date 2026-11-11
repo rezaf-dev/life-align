@@ -100,9 +100,9 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
   assertRange(start, end);
   const metric = goal.metrics.find((m) => m.id === metricId);
   const multiplier = metric && timeUnitMinutes(metric.unit);
-  if (!metric || !multiplier) throw new Error('Choose an hours or minutes measure belonging to this goal.');
+  if (metricId && (!metric || !multiplier)) throw new Error('Choose an hours or minutes measure belonging to this goal.');
   const sessions = (state.sessions ?? []).filter((s) =>
-    s.goalId === goal.id && s.metricId === metric.id && s.status === 'logged' && within(s.date, start, end));
+    s.goalId === goal.id && (!metricId || s.metricId === metricId) && s.status === 'logged' && within(s.date, start, end));
   const rows: TimesheetRow[] = [];
   for (const session of sessions) {
     const firstRow = rows.length;
@@ -121,7 +121,8 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
     if (rows[firstRow] && additional.length) rows[firstRow].workDone = additional;
   }
   let excludedCheckpoints = 0;
-  for (const entry of metric.entries) {
+  const measures = metric ? [metric] : goal.metrics.filter((m) => timeUnitMinutes(m.unit));
+  for (const measure of measures) for (const entry of measure.entries) {
     if (!within(entry.date, start, end)) continue;
     // A session is represented by its allocations/remainder above, never its mirrored ledger too.
     if (entry.source?.sessionId) continue;
@@ -133,12 +134,12 @@ export function buildTimesheet(state: AppState, goal: Goal, metricId: string, st
       id: entry.id, date: entry.date,
       description: entry.source?.taskTitle || task?.title || entry.source?.milestoneTitle || milestone?.title || (entry.value < 0 ? 'Time adjustment' : 'Recorded work'),
       milestone: entry.source?.milestoneTitle || milestone?.title,
-      minutes: entry.value * multiplier, notes: entry.note,
+      minutes: entry.value * timeUnitMinutes(measure.unit)!, notes: entry.note,
       kind: entry.value < 0 ? 'adjustment' : 'contribution',
     });
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  return { goalId: goal.id, goalTitle: goal.title, metricId, metricName: metric.name, unit: metric.unit,
+  return { goalId: goal.id, goalTitle: goal.title, metricId, metricName: metric?.name ?? 'All recorded work', unit: metric?.unit ?? 'hours',
     start, end, rows, totalMinutes: sum(rows, (r) => r.minutes), sessionCount: sessions.length, excludedCheckpoints };
 }
 

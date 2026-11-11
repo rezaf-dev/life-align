@@ -212,10 +212,10 @@ function YearView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d: s
               <div className={cn('mb-2 font-display text-lg', current && 'text-primary')}>{fmt(m, 'MMMM')}</div>
               <ul className="space-y-1">
                 {ends.map((g) => (
-                  <li key={g.id} className="flex items-center gap-1.5 text-xs font-medium"><AreaDot area={g.area} /> <span className="truncate">Target: {g.title}</span></li>
+                  <li key={g.id} className="flex items-center gap-1.5 text-xs font-medium"><AreaDot area={g.area} goalId={g.id} /> <span className="truncate">Target: {g.title}</span></li>
                 ))}
                 {ms.slice(0, 4).map((x) => (
-                  <li key={x.id} className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', x.done && 'line-through')}><AreaDot area={x.g.area} className="opacity-50" /> <span className="truncate">{x.title}</span></li>
+                  <li key={x.id} className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', x.done && 'line-through')}><AreaDot area={x.g.area} goalId={x.g.id} className="opacity-50" /> <span className="truncate">{x.title}</span></li>
                 ))}
                 {ms.length > 4 && <li className="text-xs text-muted-foreground">+{ms.length - 4} more</li>}
                 {!ends.length && !ms.length && <li className="text-xs text-muted-foreground/60">Open</li>}
@@ -249,7 +249,7 @@ function QuarterView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d
                 {live.flatMap((g) => g.milestones.filter((x) => x.dueDate.startsWith(ym)).map((x) => (
                   <li key={x.id} className="text-sm">
                     <Link href={`/goals/${g.id}`} className={cn('flex items-start gap-2 hover:text-primary', x.done && 'text-muted-foreground line-through')}>
-                      <AreaDot area={g.area} className="mt-1.5" />
+                      <AreaDot area={g.area} goalId={g.id} className="mt-1.5" />
                       <span><span className="font-num text-xs text-muted-foreground">{fmt(x.dueDate, 'd')}</span> {x.title}</span>
                     </Link>
                   </li>
@@ -306,7 +306,7 @@ function MonthView({ anchor, onDrill }: { anchor: string; onDrill: (v: View, d: 
                     const g = t.goalId ? goalById.get(t.goalId) : undefined;
                     return (
                       <li key={t.id} className={cn('flex items-center gap-1 truncate text-[0.7rem]', t.status === 'done' && 'text-muted-foreground line-through')}>
-                        {g ? <AreaDot area={g.area} className="size-1.5" /> : <span className="size-1.5 shrink-0 rounded-full bg-foreground/25" />}
+                        {g ? <AreaDot area={g.area} goalId={g.id} className="size-1.5" /> : <span className="size-1.5 shrink-0 rounded-full bg-foreground/25" />}
                         <span className="truncate">{t.title}</span>
                       </li>
                     );

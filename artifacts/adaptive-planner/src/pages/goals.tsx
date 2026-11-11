@@ -113,7 +113,7 @@ export default function GoalsPage() {
                 >
                   <div className="md:col-span-6">
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <AreaTag area={g.area} />
+                      <AreaTag area={g.area} goalId={g.id} />
                       {g.status !== 'active' && <StatusPill status={g.status} />}
                       {g.isDemo && <SampleMark />}
                     </div>
@@ -128,7 +128,7 @@ export default function GoalsPage() {
                       <span className="text-muted-foreground">Result: {h.metric?.name ?? 'not measured yet'}</span>
                       {g.status === 'active' && <HealthPill health={h.status} />}
                     </div>
-                    <PaceBar progress={h.progress} expected={g.status === 'active' ? h.expected : undefined} area={g.area} />
+                    <PaceBar progress={h.progress} expected={g.status === 'active' ? h.expected : undefined} area={g.area} goalId={g.id} />
                     <div className="mt-2 flex justify-between font-num text-xs text-muted-foreground">
                       <span className="text-foreground">{h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : '—'}{h.metric && isRecurring(h.metric) && <span className="text-muted-foreground"> {h.metric.frequency === 'weekly' ? 'this week' : 'this month'}</span>}</span>
                       <span>{h.metric ? h.status === 'not-started' ? `Starts ${fmt(h.metric.startDate!, 'MMM d')}` : formatValue(measurementTargetAt(h.metric), h.metric.unit) : ''}</span>

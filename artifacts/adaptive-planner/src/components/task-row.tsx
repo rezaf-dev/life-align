@@ -186,7 +186,7 @@ function TaskRowInner({
     if (showGoal && goal)
       meta.push(
         <span key="g" className="inline-flex min-w-0 max-w-[14rem] items-center gap-1.5">
-          <AreaDot area={goal.area} />
+          <AreaDot area={goal.area} goalId={goal.id} />
           <span className="truncate">{goal.title}</span>
         </span>,
       );
@@ -291,7 +291,7 @@ function TaskRowInner({
           {goal && (
             <DropdownMenuItem asChild>
               <Link href={`/goals/${goal.id}`}>
-                <AreaDot area={goal.area} className="mx-1" /> Open goal
+                <AreaDot area={goal.area} goalId={goal.id} className="mx-1" /> Open goal
               </Link>
             </DropdownMenuItem>
           )}

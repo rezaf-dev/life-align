@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sessionWorkDone } from '@workspace/api-zod';
-import { ListChecks, Plus, RotateCcw, X } from 'lucide-react';
+import { Copy, ListChecks, Plus, RotateCcw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAppState } from '@/lib/store/store';
 import { addTimerWorkDone, editTimerWorkDone, removeTimerWorkDone } from '@/lib/store/time-tracking';
 import { retryWorkspaceSave, useWorkspaceSync } from '@/lib/workspace-sync';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 export const WORK_DONE_MAX_ITEMS = 200;
 export const WORK_DONE_MAX_CHARS = 2000;
@@ -135,10 +136,33 @@ export function LiveWorkDoneEditor({ compact }: { compact?: boolean }) {
 /** Compact preview for logged session rows. */
 export function WorkDonePreview({ items, testId }: { items?: string[]; testId: string }) {
   const list = cleanWorkDone(items);
+  const [expanded, setExpanded] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const { toast } = useToast();
   if (!list.length) return null;
+  const copy = async () => {
+    setCopying(true);
+    try {
+      await navigator.clipboard.writeText(list.map((item) => `- ${item}`).join('\n'));
+      toast({ title: 'Work done copied', description: `${list.length} item${list.length === 1 ? '' : 's'} copied. Private notes are not included.` });
+    } catch {
+      toast({ title: 'Could not copy', description: 'Your browser blocked clipboard access. Expand the list and select the text to copy it.', variant: 'destructive' });
+    } finally { setCopying(false); }
+  };
   return (
-    <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-workdone-preview-${testId}`}>
-      <span className="text-foreground/80">Work done ({list.length}):</span> <span className="[overflow-wrap:anywhere]">{list[0].length > 90 ? `${list[0].slice(0, 90)}…` : list[0]}{list.length > 1 ? ` +${list.length - 1} more` : ''}</span>
+    <div className="mt-2 text-xs text-muted-foreground" data-testid={`text-workdone-preview-${testId}`}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="text-foreground/80">Work done ({list.length})</span>
+        <button type="button" onClick={() => void copy()} disabled={copying} aria-label="Copy all work done items"
+          className="inline-flex min-h-8 items-center gap-1 rounded px-1.5 text-foreground/80 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          data-testid={`button-copy-workdone-${testId}`}><Copy className="size-3" aria-hidden />{copying ? 'Copying…' : 'Copy all'}</button>
+      </div>
+      <ul id={`workdone-list-${testId}`} className="ml-4 list-disc space-y-1 leading-relaxed [overflow-wrap:anywhere]" data-testid={`list-workdone-preview-${testId}`}>
+        {(expanded ? list : list.slice(0, 2)).map((item, i) => <li className="whitespace-pre-wrap" key={i}>{item}</li>)}
+      </ul>
+      {list.length > 2 && <button type="button" aria-expanded={expanded} aria-controls={`workdone-list-${testId}`} onClick={() => setExpanded((v) => !v)}
+        className="mt-1 min-h-8 rounded px-1.5 text-foreground/80 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid={`button-expand-workdone-${testId}`}>{expanded ? 'Show less' : `Show ${list.length - 2} more`}</button>}
     </div>
   );
 }

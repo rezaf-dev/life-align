@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { AppState } from './types';
 import { legacyMeasurementStart } from '@workspace/api-zod';
+import { assignGoalColors } from '../goal-colors';
 
 const listeners = new Set<() => void>();
 let writer: ((next: AppState) => void) | null = null;
@@ -29,6 +30,7 @@ export function getState() {
 
 export function replaceState(next: AppState) {
   if (!writer) throw new Error('Your private workspace is not ready. Sign in and wait for approval.');
+  assignGoalColors(next.goals);
   writer(next);
   state = next;
   emit();
@@ -36,6 +38,7 @@ export function replaceState(next: AppState) {
 
 export function hydrateState(next: AppState) {
   state = structuredClone(next);
+  assignGoalColors(state.goals);
   for (const goal of state.goals) for (const metric of goal.metrics) {
     const startDate = legacyMeasurementStart(metric, goal.createdAt);
     if (startDate) metric.startDate = startDate;

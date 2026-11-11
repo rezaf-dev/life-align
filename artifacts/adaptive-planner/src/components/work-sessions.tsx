@@ -73,7 +73,7 @@ export function GoalSelect({ goals, value, onChange, disabled }: { goals: Goal[]
         <SelectTrigger data-testid="select-session-goal"><SelectValue placeholder="Choose a goal" /></SelectTrigger>
         <SelectContent>
           <SelectItem value={GENERAL}><span className="inline-flex items-center gap-2"><span aria-hidden className="size-2 rounded-full border border-muted-foreground/60" /> {GENERAL_LABEL}</span></SelectItem>
-          {goals.map((g) => <SelectItem key={g.id} value={g.id}><span className="inline-flex items-center gap-2"><AreaDot area={g.area} /> {g.title}</span></SelectItem>)}
+          {goals.map((g) => <SelectItem key={g.id} value={g.id}><span className="inline-flex items-center gap-2"><AreaDot area={g.area} goalId={g.id} /> {g.title}</span></SelectItem>)}
         </SelectContent>
       </Select>
     </Field>
@@ -539,7 +539,7 @@ export function SessionRow({ session: s, goal: g, showGoal = true, hideDate, onP
           {s.recurrence !== 'none' && <Repeat className="mt-1 size-3 shrink-0 text-muted-foreground" aria-label={`Repeats ${s.recurrence}`} />}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-          {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>{GENERAL_LABEL}</span>)}
+          {showGoal && (g ? <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[14rem]"><AreaDot area={g.area} goalId={g.id} /><span className="truncate text-foreground/80">{g.title}</span></span> : <span>{GENERAL_LABEL}</span>)}
           {!hideDate && <span className="font-num">{d ? relDay(d) : 'Unscheduled'}</span>}
           {isPlanned && <span>{mins(s.plannedMinutes)} reserved{s.taskIds.length ? ` · ${s.taskIds.length} task${s.taskIds.length > 1 ? 's' : ''}` : ''}</span>}
           {isSkipped && <span>No time credited</span>}

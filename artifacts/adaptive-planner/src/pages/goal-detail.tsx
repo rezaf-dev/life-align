@@ -141,7 +141,7 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
       <header className="rise mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 max-w-3xl">
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
-            <AreaTag area={goal.area} />
+            <AreaTag area={goal.area} goalId={goal.id} />
             <StatusPill status={goal.status} />
             <span className="text-xs capitalize text-muted-foreground">{goal.priority} priority</span>
             {goal.isDemo && <SampleMark />}
@@ -554,7 +554,7 @@ function MetricBlock({ goal, metric, onEdit, onRecord, onLog, onTarget, onDelete
         </div>
       )}
 
-      <PaceBar progress={progress} area={goal.area} className="mt-2" />
+      <PaceBar progress={progress} area={goal.area} goalId={goal.id} className="mt-2" />
       <MetricAttribution goal={goal} metric={metric} at={at} />
       <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
         <Button size="sm" variant="ghost" className="h-9 px-2 sm:h-8" onClick={() => onRecord(undefined, isHistorical ? at : undefined)} data-testid={`button-record-${metric.id}`}><TrendingUp /> Contribution</Button>

@@ -170,13 +170,13 @@ export default function OverviewPage() {
                     <li key={g.id} data-testid={`health-goal-${g.id}`}>
                       <div className="flex items-start justify-between gap-3">
                         <Link href={`/goals/${g.id}`} className="flex min-w-0 flex-1 items-center gap-2 hover:text-primary" data-testid={`link-goal-${g.id}`}>
-                          <AreaDot area={g.area} />
+                          <AreaDot area={g.area} goalId={g.id} />
                           <span className="truncate text-[0.93rem] font-medium">{g.title}</span>
                         </Link>
                         <HealthPill health={h.status} />
                       </div>
                       <div className="mt-2 flex items-center gap-3">
-                        <PaceBar progress={h.progress} expected={h.expected} area={g.area} className="flex-1" />
+                        <PaceBar progress={h.progress} expected={h.expected} area={g.area} goalId={g.id} className="flex-1" />
                         <span className="shrink-0 text-right font-num text-xs">
                           {h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'No result yet'}{h.metric && isRecurring(h.metric) && <span className="text-muted-foreground"> {h.metric.frequency === 'weekly' ? 'this week' : 'this month'}</span>}
                           {h.metric && h.status !== 'not-started' && <span className="text-muted-foreground"> / {formatValue(measurementTargetAt(h.metric), h.metric.unit)}</span>}
@@ -226,7 +226,7 @@ export default function OverviewPage() {
                         if (!name) return null;
                         return (
                           <span className="mb-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" data-testid={`text-insight-goal-${i.id}`}>
-                            {goal && <AreaDot area={goal.area} />}
+                            {goal && <AreaDot area={goal.area} goalId={goal.id} />}
                             {i.goalId ? <Link href={`/goals/${i.goalId}`} className="break-words font-medium text-foreground/80 hover:text-primary">{name}</Link> : <span className="break-words">{name}</span>}
                           </span>
                         );
@@ -252,7 +252,7 @@ export default function OverviewPage() {
                 {data.milestones.map((m) => (
                   <li key={m.id}>
                     <Link href={`/goals/${m.goal.id}`} className="flex min-h-10 items-center justify-between gap-3 py-1.5 text-sm hover:text-primary">
-                      <span className="flex min-w-0 items-center gap-2"><AreaDot area={m.goal.area} /><span className="truncate">{m.title}</span></span>
+                      <span className="flex min-w-0 items-center gap-2"><AreaDot area={m.goal.area} goalId={m.goal.id} /><span className="truncate">{m.title}</span></span>
                       <span className={cn('shrink-0 font-num text-xs', m.dueDate < today ? 'text-destructive' : 'text-muted-foreground')}>{relDay(m.dueDate)}</span>
                     </Link>
                   </li>

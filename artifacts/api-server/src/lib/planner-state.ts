@@ -28,6 +28,7 @@ const metric = z.object({
 });
 const goal = z.object({
   id, title: text, outcome: text, area: z.enum(['business', 'fitness', 'english', 'personal']),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   priority, targetDate: text, status: z.enum(['active', 'paused', 'completed', 'cancelled']),
   strategy: z.object({ summary: text, rationale: text, updatedAt: text }).passthrough(),
   milestones: z.array(milestone), metrics: z.array(metric), history: z.array(history),

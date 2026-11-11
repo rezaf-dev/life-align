@@ -39,6 +39,33 @@ test('timesheets scope both goal and measure, exclude time-only sessions, and in
   assert.equal(buildTimesheet(state, goal, 'hours', '2024-01-15', '2024-01-15').totalMinutes, 60);
   assert.equal(buildTimesheet(state, goal, 'hours', '2024-01-16', '2024-01-16').totalMinutes, 60);
 });
+test('all-work timesheets include unmeasured goal time once, preserve work done, and keep unrelated work out', () => {
+  const { state, goal, session } = fixture();
+  state.sessions!.push(
+    { ...session, id: 'unmeasured', metricId: undefined, actualMinutes: 30, allocations: [], workDone: ['Verified DNS', 'Sent handover'] },
+    { ...session, id: 'unrelated', goalId: 'other', metricId: undefined },
+    { ...session, id: 'general', goalId: '', metricId: undefined },
+    { ...session, id: 'planned', status: 'planned', actualMinutes: undefined, allocations: [] },
+  );
+  const sheet = buildTimesheet(state, goal, '', '2024-01-15', '2024-01-15');
+  assert.equal(sheet.totalMinutes, 90);
+  assert.equal(sheet.sessionCount, 2);
+  assert.equal(sheet.metricId, '');
+  assert.deepEqual(sheet.rows.find((r) => r.sessionId === 'unmeasured')!.workDone, ['Verified DNS', 'Sent handover']);
+  for (const exported of [timesheetCsv(sheet), timesheetHtml(sheet)]) {
+    assert.ok(exported.includes('Verified DNS'));
+    assert.ok(!exported.includes('PRIVATE SESSION NOTE'));
+  }
+});
+test('client timesheets work for goals without any time measure', () => {
+  const { state, goal, session } = fixture();
+  goal.metrics = [];
+  session.metricId = undefined;
+  const sheet = buildTimesheet(state, goal, '', '2024-01-15', '2024-01-15');
+  assert.equal(sheet.totalMinutes, 60);
+  assert.equal(sheet.metricName, 'All recorded work');
+  assert.ok(timesheetHtml(sheet).includes('Configure email'));
+});
 test('manual time, signed corrections and checkpoints remain distinct from session time', () => {
   const { state, goal, metric } = fixture();
   metric.entries.push({ id: 'manual', date: '2024-01-16', mode: 'contribution', value: 0.5, source: { taskId: 'removed', taskTitle: 'Historical work' } },
