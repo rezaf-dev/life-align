@@ -1,4 +1,4 @@
-import { addDaysIso, addMonthsIso, nowStamp, todayIso, uid } from '@/lib/dates';
+import { addDaysIso, addMonthsIso, nowStamp, todayIso, uid, weekStartIso } from '@/lib/dates';
 import { createSeed } from './seed';
 import { isMeasurementDate, measurementEntrySchema, measurementPeriod } from '@workspace/api-zod';
 import { getState, isValidState, replaceState, update } from './store';
@@ -163,6 +163,7 @@ export interface GoalInput {
   title: string;
   outcome: string;
   area: Area;
+  category?: Goal['category'];
   priority: Priority;
   targetDate: string;
   strategy?: string;
@@ -185,6 +186,7 @@ function buildGoal(id: string, input: GoalInput, isDemo: boolean): Goal {
     title: input.title.trim(),
     outcome: input.outcome.trim(),
     area: input.area,
+    category: input.category,
     priority: input.priority,
     targetDate: input.targetDate,
     status: 'active',
@@ -199,10 +201,10 @@ function buildGoal(id: string, input: GoalInput, isDemo: boolean): Goal {
   };
 }
 
-export function editGoalBasics(id: string, patch: Pick<Goal, 'title' | 'outcome' | 'area' | 'priority'>) {
+export function editGoalBasics(id: string, patch: Pick<Goal, 'title' | 'outcome' | 'area' | 'priority'> & Pick<Goal, 'category'>) {
   update((d) => {
     const g = findGoal(d, id);
-    const changed = (['title', 'outcome', 'area', 'priority'] as const).filter((k) => g[k] !== patch[k]);
+    const changed = (['title', 'outcome', 'area', 'priority', 'category'] as const).filter((k) => k in patch && g[k] !== patch[k]);
     if (!changed.length) return;
     Object.assign(g, patch);
     g.history.unshift(ev({ kind: 'edit', summary: `Edited ${changed.join(', ')}` }));
@@ -578,6 +580,7 @@ export type ProposedAdjustment =
 export function saveReview(
   review: Omit<Review, 'id' | 'createdAt' | 'adjustments' | 'isDemo'>,
   approved: ProposedAdjustment[],
+  options?: { applyFocus?: boolean; nextWeekStart?: string },
 ) {
   const s = getState();
   const applied: Adjustment[] = approved.map((a) => {
@@ -589,13 +592,50 @@ export function saveReview(
     }
     return { kind: 'pause', goalId: a.goalId, summary: `Paused "${g?.title}"` };
   });
-  approved.forEach((a) => {
-    if (a.kind === 'strategy') changeStrategy(a.goalId, a.summary, a.rationale, a.reason, 'review');
-    if (a.kind === 'milestone') rescheduleMilestone(a.goalId, a.milestoneId, a.date, a.reason, 'review');
-    if (a.kind === 'pause') setGoalStatus(a.goalId, 'paused', a.reason, 'review');
-  });
   const id = uid();
   update((d) => {
+    const nextWeek = options?.nextWeekStart ?? addDaysIso(weekStartIso(review.periodEnd), 7);
+    if (!isMeasurementDate(nextWeek) || nextWeek < weekStartIso(todayIso())) {
+      if (review.answers.carryoverTaskIds?.length || options?.applyFocus) throw new Error('Choose a current or future week for the next plan.');
+    }
+    const carryover = [...new Set(review.answers.carryoverTaskIds ?? [])].map((taskId) => {
+      const task = d.tasks.find((t) => t.id === taskId);
+      if (!task || task.status !== 'open' || task.archived) throw new Error('A selected carryover task is no longer open. Review your selection.');
+      if (d.activeTimer?.taskId === task.id) throw new Error('Finish the active timer before moving its task.');
+      return task;
+    });
+    approved.forEach((a) => {
+      const g = findGoal(d, a.goalId);
+      if (a.kind === 'strategy') {
+        const from = g.strategy.summary;
+        g.strategy = { summary: a.summary, rationale: a.rationale, updatedAt: nowStamp() };
+        g.history.unshift(ev({ kind: 'strategy', summary: 'Strategy revised', from, to: a.summary, reason: a.reason, source: 'review' }));
+      } else if (a.kind === 'milestone') {
+        const milestone = g.milestones.find((m) => m.id === a.milestoneId);
+        if (!milestone) throw new Error('This milestone no longer exists.');
+        const date = new Date(`${a.date}T12:00:00Z`);
+        if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== a.date) throw new Error('Choose a valid milestone date.');
+        const from = milestone.dueDate;
+        milestone.dueDate = a.date;
+        g.history.unshift(ev({ kind: 'milestone', summary: `Rescheduled "${milestone.title}"`, from, to: a.date, reason: a.reason, source: 'review' }));
+      } else {
+        const from = g.status;
+        g.status = 'paused';
+        g.history.unshift(ev({ kind: 'status', summary: 'Goal paused', from, to: 'paused', reason: a.reason, source: 'review' }));
+      }
+    });
+    carryover.forEach((task) => {
+      const carryDate = nextWeek < todayIso() ? todayIso() : nextWeek;
+      task.plannedDate = carryDate;
+      if (task.dueDate && task.dueDate < carryDate) task.dueDate = carryDate;
+      if (task.reminder) {
+        task.reminder = `${carryDate}${task.reminder.slice(10)}`;
+        task.reminderDismissed = false;
+      }
+    });
+    if (options?.applyFocus && review.answers.focus.trim()) {
+      d.weekPlans[nextWeek] = { ...(d.weekPlans[nextWeek] ?? defaultWeek(nextWeek)), focus: review.answers.focus.trim() };
+    }
     d.reviews.unshift({ ...review, id, createdAt: nowStamp(), adjustments: applied, isDemo: false });
     const touched = new Set(approved.map((a) => a.goalId));
     d.goals.forEach((g) => {

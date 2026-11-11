@@ -1,3 +1,4 @@
+import { getGoalPaceFeedback } from '@/lib/goal-pace';
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
 import {
@@ -106,6 +107,33 @@ export default function GoalDetailPage() {
   return <GoalWorkspace goal={goal} />;
 }
 
+/** Friendly pace guidance: where you are, where a steady path would be, where you're heading, one next step. */
+function PaceGuidance({ goal }: { goal: Goal }) {
+  const fb = getGoalPaceFeedback(goal, todayIso());
+  const rows: [string, string][] = [
+    ['Where you are', fb.current],
+    ['A steady path would be', fb.expected],
+    ['If this pace holds', fb.forecast],
+  ];
+  return (
+    <section className="surface rise mb-4 grid gap-4 p-4 md:grid-cols-12" aria-labelledby="pace-guidance-h" data-testid="section-pace-guidance">
+      <h2 id="pace-guidance-h" className="sr-only">Pace guidance</h2>
+      <dl className="grid gap-3 sm:grid-cols-3 md:col-span-8">
+        {rows.map(([l, v]) => (
+          <div key={l}>
+            <dt className="text-xs text-muted-foreground">{l}</dt>
+            <dd className="text-sm leading-snug">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="rounded-lg bg-accent/50 px-3 py-2.5 md:col-span-4" data-testid="text-pace-recommendation">
+        <div className="text-xs text-accent-foreground">A good next step</div>
+        <p className="text-sm leading-snug">{fb.recommendation}</p>
+      </div>
+    </section>
+  );
+}
+
 function GoalWorkspace({ goal }: { goal: Goal }) {
   const state = useAppState();
   const { toast } = useToast();
@@ -192,13 +220,15 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
         <Fact label="Result" value={h.metric ? formatValue(metricValueAt(h.metric), h.metric.unit) : 'Not measured'} sub={h.metric ? `of ${formatValue(h.metric.target, h.metric.unit)}${isRecurring(h.metric) ? ` ${frequencyNoun(h.metric.frequency)}, ${periodLabel(h.metric, undefined, false)?.toLowerCase()}` : ''} · ${h.metric.name}` : 'Add a result measure'} />
         <Fact label="Tasks done, 30 days" value={`${ex.done}`} sub={`${ex.open} still open`} />
         <div className="bg-card p-3 sm:p-4">
-          <div className="mb-1 text-xs text-muted-foreground" title="Compares your logged result with an even pace to the target date. A reference, not a forecast.">Pace</div>
+          <div className="mb-1 text-xs text-muted-foreground" title="Where your logged result sits against a steady path to the target date.">Pace</div>
           {goal.status === 'active' ? <HealthPill health={h.status} /> : <StatusPill status={goal.status} />}
           <p className="mt-1 truncate text-xs text-muted-foreground">
             {nextMs ? <>Next: {nextMs.title} &middot; {relDay(nextMs.dueDate).toLowerCase()}</> : 'No upcoming milestone'}
           </p>
         </div>
       </div>
+
+      {goal.status === 'active' && <PaceGuidance goal={goal} />}
 
       {/* Compact strategy */}
       <div className="surface rise mb-5 p-4">
@@ -627,7 +657,7 @@ function ReasonDateDialog({ open, onClose, title, description, initialDate, onSa
 
 const statusCopy: Record<GoalStatus, { title: string; desc: string; cta: string }> = {
   active: { title: 'Resume this goal', desc: 'It returns to your active goals and health checks.', cta: 'Resume' },
-  paused: { title: 'Pause this goal', desc: 'Pausing removes it from pace checks and Needs attention. Nothing is deleted.', cta: 'Pause goal' },
+  paused: { title: 'Pause this goal', desc: 'Pausing removes it from pace checks and What needs a decision. Nothing is deleted.', cta: 'Pause goal' },
   completed: { title: 'Mark complete', desc: 'Record what was achieved. History and metrics are kept.', cta: 'Mark complete' },
   cancelled: { title: 'Cancel this goal', desc: 'Cancelled goals stay in history but stop appearing in plans. You can resume later.', cta: 'Cancel goal' },
 };

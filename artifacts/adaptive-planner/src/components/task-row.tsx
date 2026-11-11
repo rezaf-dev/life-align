@@ -57,7 +57,7 @@ export function ScheduleControl({ task, hideLabel }: { task: Task; hideLabel?: b
           data-testid={`button-schedule-${task.id}`}
           className={cn(
             'inline-flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:min-w-8',
-            overdue && 'text-destructive',
+            overdue && 'text-warning',
           )}
         >
           <CalendarDays className="size-4" />
@@ -192,7 +192,7 @@ function TaskRowInner({
       );
     if (task.skippedAt) meta.push(<span key="skipped" className="text-muted-foreground">Skipped · not completed</span>);
     if (task.dueDate && !done && !task.skippedAt)
-      meta.push(<span key="d" className={cn('font-num', task.dueDate < today && 'text-destructive')}>due {relDay(task.dueDate).toLowerCase()}</span>);
+      meta.push(<span key="d" className={cn('font-num', task.dueDate < today && 'text-warning')}>due {relDay(task.dueDate).toLowerCase()}</span>);
     if (task.effort > 0 && !done) meta.push(<span key="e" className="font-num">{effortLabel(task.effort)}</span>);
     if (goal?.metrics.length) meta.push(<ContributionChips key="r" goal={goal} filter={{ taskId: task.id }} testId={`text-task-result-${task.id}`} />);
     if (done && task.completedAt) meta.push(<span key="c" className="font-num">done {relDay(task.completedAt.slice(0, 10)).toLowerCase()}</span>);

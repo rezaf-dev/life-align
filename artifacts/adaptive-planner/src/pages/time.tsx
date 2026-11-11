@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { buildCategoryDistribution } from '@/lib/goal-categories';
 import { Link } from 'wouter';
 import { Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -24,6 +25,55 @@ const RANGES: { key: RangeKey; label: string }[] = [
 const m = formatMinutes;
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const clock = (stamp: string, timezone: string) => new Intl.DateTimeFormat('en', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(stamp));
+
+/** Time and task counts by type of work, for the same range as everything else on this page. */
+function CategoryDistribution({ start, end }: { start: string; end: string }) {
+  const state = useAppState();
+  const rows = useMemo(() => buildCategoryDistribution(state, start, end), [state, start, end]);
+  const totalMin = rows.reduce((a, r) => a + r.minutes, 0);
+  const totalTasks = rows.reduce((a, r) => a + r.tasks, 0);
+  const maxMin = Math.max(1, ...rows.map((r) => r.minutes));
+  const maxTasks = Math.max(1, ...rows.map((r) => r.tasks));
+  const visible = rows.filter((r) => r.minutes > 0 || r.tasks > 0);
+  return (
+    <section className="surface rise min-w-0 p-4 sm:p-5" aria-labelledby="category-h" data-testid="section-category-distribution">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="category-h" className="font-display text-xl">By category</h2>
+        <span className="text-xs text-muted-foreground">Time logged and tasks dated in this range</span>
+      </div>
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No time or tasks in this range yet.</p>
+      ) : (
+        <ul className="space-y-3">
+          <li className="hidden grid-cols-[minmax(0,10rem)_1fr_1fr] gap-4 text-xs text-muted-foreground sm:grid" aria-hidden>
+            <span />
+            <span>Time</span>
+            <span>Tasks, completed of total</span>
+          </li>
+          {visible.map((r) => (
+            <li key={r.category} className="grid gap-1.5 sm:grid-cols-[minmax(0,10rem)_1fr_1fr] sm:items-center sm:gap-4" data-testid={`row-category-${r.category}`}>
+              <span className="truncate text-sm font-medium">{r.label}</span>
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+                  <div className="h-full origin-left rounded-full bg-primary/80" style={{ transform: `scaleX(${r.minutes / maxMin})` }} />
+                </div>
+                <span className="w-24 shrink-0 text-right font-num text-xs" data-testid={`text-category-minutes-${r.category}`}>{formatMinutes(r.minutes)} <span className="text-muted-foreground">{totalMin ? Math.round((r.minutes / totalMin) * 100) : 0}%</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+                  <div className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-chart-3/35" style={{ transform: `scaleX(${r.tasks / maxTasks})` }} />
+                  <div className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-chart-3" style={{ transform: `scaleX(${r.completedTasks / maxTasks})` }} />
+                </div>
+                <span className="w-24 shrink-0 text-right font-num text-xs" data-testid={`text-category-tasks-${r.category}`}>{r.completedTasks} of {r.tasks} <span className="text-muted-foreground">{totalTasks ? Math.round((r.tasks / totalTasks) * 100) : 0}%</span></span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-muted-foreground">Goals without a category count as Other. Work not linked to a goal is General work.</p>
+    </section>
+  );
+}
 
 export default function TimePage() {
   const state = useAppState();
@@ -148,6 +198,8 @@ export default function TimePage() {
                   <p className="mt-3 text-xs text-muted-foreground">Unplanned is not worse. It is the work that arrived on the day.</p>
                 </section>
               </div>
+
+              <CategoryDistribution start={start} end={end} />
 
               <div className="grid min-w-0 gap-5 lg:grid-cols-12">
                 {/* By goal with results */}

@@ -355,6 +355,8 @@ export function AssistantPanel() {
       { label: 'Plan a goal', icon: Target, draft: 'I want to ' , hint: 'Describe it in a sentence' },
       { label: 'Break down a task', icon: ListTree, ...(focusTask ? { send: `Break down "${focusTask.title}" into a few concrete steps.` } : { draft: 'Break down this task: ' }), hint: focusTask ? focusTask.title : 'Steps nest under the task' },
       { label: 'Plan my week', icon: CalendarRange, send: `Help me plan the week of ${fmt(nextMonday(), 'MMMM d')} within my real capacity.`, hint: 'Uses capacity and deadlines' },
+      { label: 'Plan my week around...', icon: CalendarRange, ...(goalName ? { send: `Plan my week around "${goalName}" within my real capacity.` } : { draft: 'Plan my week around ' }), hint: goalName ?? 'Name what matters most' },
+      { label: 'Goal into 3 sessions', icon: Target, ...(goalName ? { send: `Turn "${goalName}" into 3 work sessions this week.` } : { draft: 'Turn this goal into 3 sessions this week: ' }), hint: goalName ?? 'Sessions you approve first' },
       { label: 'Analyze my progress', icon: ChartLine, send: goalName ? `How am I doing on "${goalName}"? Be direct.` : 'Analyze my progress across active goals over the last two weeks. Be direct.', hint: goalName ?? 'Execution against results' },
       { label: 'Improve my strategy', icon: Compass, send: goalName ? `Look at my strategy for "${goalName}" and suggest a sharper one if the evidence supports it.` : 'Which of my goals has the weakest strategy, and how would you improve it?', hint: goalName ?? 'Grounded in your metrics' },
       { label: 'Review my month', icon: NotebookPen, send: 'Review my month: what moved, what stalled, and what should change next month.', hint: 'Wins, misses, adjustments' },

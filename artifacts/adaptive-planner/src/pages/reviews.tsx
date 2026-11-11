@@ -12,11 +12,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field } from '@/components/form-dialog';
 import { EmptyState, PageHeader, SampleMark } from '@/components/primitives';
 import { addDaysIso, daysBetween, fmt, monthEndIso, monthStartIso, relDay, todayIso, weekStartIso } from '@/lib/dates';
-import { deleteReview, saveReview, setWeekPlan, type ProposedAdjustment } from '@/lib/store/actions';
+import { deleteReview, saveReview, type ProposedAdjustment } from '@/lib/store/actions';
+import { useStagedAction } from '@/components/time-tracker';
 import { generateInsights } from '@/lib/store/insights';
 import { computeSnapshot, formatValue } from '@/lib/store/selectors';
 import { useAppState } from '@/lib/store/store';
-import type { ReviewAnswers, ReviewSnapshot } from '@/lib/store/types';
+import type { ReviewAnswers, ReviewSnapshot, Task } from '@/lib/store/types';
 import { formatPeriod } from '@/components/measurement-period';
 import { setNavGuard } from '@/lib/nav-guard';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,8 @@ const QUESTIONS: { key: keyof ReviewAnswers; q: string; help: string }[] = [
   { key: 'focus', q: 'One focus for the next period', help: 'One sentence.' },
 ];
 
-const PHASES = ['Summary', 'Reflect', 'Adjust'] as const;
+const MONTHLY_PHASES = ['Summary', 'Reflect', 'Adjust'];
+const WEEKLY_PHASES = ['Wins', 'Misses', 'Carryover', 'Next focus', 'Monday'];
 
 export default function ReviewsPage() {
   const search = useSearch();
@@ -97,6 +99,18 @@ function ReviewHistory() {
                     <motion.div id={`review-body-${r.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="border-t border-border bg-background/40 p-4 sm:p-5">
                       <div className="grid gap-6 lg:grid-cols-12">
                         <dl className="space-y-3 lg:col-span-7">
+                          {r.answers.mondayCommitment && (
+                            <div>
+                              <dt className="text-xs font-medium text-muted-foreground">One commitment for Monday</dt>
+                              <dd className="text-[0.95rem]">{r.answers.mondayCommitment}</dd>
+                            </div>
+                          )}
+                          {!!r.answers.carryoverTaskIds?.length && (
+                            <div>
+                              <dt className="text-xs font-medium text-muted-foreground">Carried over</dt>
+                              <dd className="text-[0.95rem]">{r.answers.carryoverTaskIds.length} task{r.answers.carryoverTaskIds.length === 1 ? '' : 's'} moved to the next Monday</dd>
+                            </div>
+                          )}
                           {QUESTIONS.map((q) => (
                             <div key={q.key}>
                               <dt className="text-xs font-medium text-muted-foreground">{q.q}</dt>
@@ -203,6 +217,8 @@ type Draft = ProposedAdjustment & { key: string; approved: boolean; unapproved?:
 
 function ReviewFlow({ type, onExit }: { type: 'weekly' | 'monthly'; onExit: () => void }) {
   const state = useAppState();
+  const action = useStagedAction();
+  const PHASES = type === 'weekly' ? WEEKLY_PHASES : MONTHLY_PHASES;
   const { toast } = useToast();
   const today = todayIso();
   const thisWs = weekStartIso(today);
@@ -222,12 +238,16 @@ function ReviewFlow({ type, onExit }: { type: 'weekly' | 'monthly'; onExit: () =
   const insights = useMemo(() => generateInsights(state).slice(0, 4), [state]);
   const [phase, setPhase] = useState(0);
   const [answers, setAnswers] = useState<ReviewAnswers>({ wins: '', misses: '', learned: '', change: '', focus: '' });
+  const [carry, setCarry] = useState<string[]>([]);
+  const [monday, setMonday] = useState('');
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [applyFocus, setApplyFocus] = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
   const activeGoals = state.goals.filter((g) => g.status === 'active');
 
-  const dirty = Object.values(answers).some((v) => v.trim()) || drafts.length > 0;
+  const dirty =
+    Object.values(answers).some((v) => (typeof v === 'string' ? !!v.trim() : Array.isArray(v) && v.length > 0)) ||
+    drafts.length > 0 || carry.length > 0 || !!monday.trim();
 
   // Guard: browser refresh / close, and in-app navigation through the shell.
   useEffect(() => {
@@ -269,122 +289,43 @@ function ReviewFlow({ type, onExit }: { type: 'weekly' | 'monthly'; onExit: () =
     (d.kind === 'strategy' ? !!d.summary.trim() : d.kind === 'milestone' ? !!d.milestoneId && !!d.date : true);
   const approved = drafts.filter((d) => d.approved);
   const invalidApproved = approved.filter((d) => !valid(d));
-  const nextFocusWeek = period.start === thisWs ? 'next' : 'this';
+  const nextFocusWeek = 'next';
+  // A late review must never move carryover back to an already missed Monday.
+  const nextWs = addDaysIso(thisWs, 7);
+  const carryCandidates = useMemo(
+    () => state.tasks
+      .filter((t) => !t.archived && t.status !== 'done' && !!(t.plannedDate ?? t.dueDate) && (t.plannedDate ?? t.dueDate)! <= period.end && (t.plannedDate ?? '') < nextWs)
+      .sort((a, b) => (a.plannedDate ?? a.dueDate ?? '').localeCompare(b.plannedDate ?? b.dueDate ?? '')),
+    [state.tasks, period.end, nextWs],
+  );
+  const carryTasks = carryCandidates.filter((t) => carry.includes(t.id));
+  const willApplyFocus = type === 'weekly' && applyFocus && !!answers.focus.trim();
 
   const save = () => {
     if (invalidApproved.length) return;
-    saveReview(
-      { type, periodStart: period.start, periodEnd: period.end, answers, snapshot },
-      approved.map(({ key: _k, approved: _a, unapproved: _u, ...rest }) => rest as ProposedAdjustment),
+    const finalAnswers: ReviewAnswers = type === 'weekly'
+      ? { ...answers, carryoverTaskIds: carryTasks.map((t) => t.id), mondayCommitment: monday.trim() }
+      : answers;
+    const n = approved.length;
+    void action.run(
+      () => {
+        saveReview(
+          { type, periodStart: period.start, periodEnd: period.end, answers: finalAnswers, snapshot },
+          approved.map(({ key: _k, approved: _a, unapproved: _u, ...rest }) => rest as ProposedAdjustment),
+          type === 'weekly' ? { applyFocus: willApplyFocus, nextWeekStart: nextWs } : undefined,
+        );
+      },
+      () => {
+        setNavGuard(null);
+        toast({ title: 'Review saved', description: n ? `${n} change${n > 1 ? 's' : ''} applied with history.` : 'No plan changes applied.' });
+        onExit();
+      },
     );
-    if (type === 'weekly' && applyFocus && answers.focus.trim()) {
-      const nextWs = period.start === thisWs ? addDaysIso(thisWs, 7) : thisWs;
-      setWeekPlan(nextWs, { focus: answers.focus.trim() });
-    }
-    setNavGuard(null);
-    toast({ title: 'Review saved', description: approved.length ? `${approved.length} change${approved.length > 1 ? 's' : ''} applied with history.` : 'No plan changes applied.' });
-    onExit();
   };
 
-  const periodText = `${period.label}, ${fmt(period.start, 'MMM d')} – ${fmt(period.end, 'MMM d')}`;
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm capitalize text-muted-foreground">{type} review</div>
-          <div className="font-display text-xl" data-testid="text-review-period">{periodText}</div>
-        </div>
-        <Button variant="ghost" size="sm" onClick={requestExit} data-testid="button-exit-review"><X /> Exit</Button>
-      </div>
-
-      <ol className="mb-6 grid grid-cols-3 gap-1.5" aria-label="Review phases">
-        {PHASES.map((p, i) => (
-          <li key={p}>
-            <button
-              type="button"
-              onClick={() => setPhase(i)}
-              aria-current={phase === i ? 'step' : undefined}
-              className={cn(
-                'flex min-h-10 w-full items-center gap-2 border-t-2 pt-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                i <= phase ? 'border-primary text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
-              )}
-              data-testid={`button-phase-${p.toLowerCase()}`}
-            >
-              <span className="font-num text-xs">{i + 1}</span> {p}
-            </button>
-          </li>
-        ))}
-      </ol>
-
-      <AnimatePresence mode="wait">
-        <motion.div key={phase} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-          {phase === 0 && (
-            <div className="grid gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-7">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <h1 className="font-display text-2xl">What happened</h1>
-                  <div className="inline-flex rounded-lg border border-border p-1" role="group" aria-label="Review period">
-                    {periods.map((p, i) => (
-                      <button key={p.label} type="button" onClick={() => setPeriodIdx(i)} aria-pressed={periodIdx === i} className={cn('min-h-8 rounded-md px-3 text-sm', periodIdx === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')} data-testid={`button-period-${i}`}>
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="surface p-4"><SnapshotView snap={snapshot} /></div>
-              </div>
-              <div className="lg:col-span-5">
-                <h2 className="mb-2 text-sm font-medium">Needs attention</h2>
-                {insights.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nothing stands out.</p>
-                ) : (
-                  <ul className="space-y-2.5 text-sm">
-                    {insights.map((i) => (
-                      <li key={i.id} className="flex gap-2">
-                        <span className="min-w-0"><span className="font-medium">{i.title}.</span> <span className="text-muted-foreground">{i.detail}</span></span>
-                        <span className="ml-auto shrink-0 text-muted-foreground" title={`Rule: ${i.rule}`} aria-label={`Rule: ${i.rule}`}><Info className="size-3.5" /></span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-
-          {phase === 1 && (
-            <div className="grid gap-5 lg:grid-cols-12">
-              <div className="space-y-4 lg:col-span-8">
-                <div>
-                  <h1 className="font-display text-2xl">Reflect</h1>
-                  <p className="text-sm text-muted-foreground">Short answers are fine. Every question is optional.</p>
-                </div>
-                {QUESTIONS.map((q, i) => (
-                  <div key={q.key}>
-                    <label htmlFor={`q-${q.key}`} className="block text-[0.95rem] font-medium">
-                      <span className="mr-1.5 font-num text-xs text-primary">{i + 1}</span>{q.q}
-                    </label>
-                    <p className="mb-1.5 text-xs text-muted-foreground">{q.help}</p>
-                    {q.key === 'focus' ? (
-                      <Input id={`q-${q.key}`} value={answers[q.key]} onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))} className="h-10" data-testid={`input-review-${q.key}`} />
-                    ) : (
-                      <Textarea id={`q-${q.key}`} autoFocus={i === 0} rows={2} value={answers[q.key]} onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))} className="min-h-[3.5rem] text-[0.95rem]" data-testid={`input-review-${q.key}`} />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <aside className="lg:col-span-4" aria-label="Actuals for reference">
-                <div className="surface p-4 lg:sticky lg:top-6">
-                  <div className="mb-2 text-xs text-muted-foreground">For reference &middot; {periodText}</div>
-                  <SnapshotView snap={snapshot} compact />
-                </div>
-              </aside>
-            </div>
-          )}
-
-          {phase === 2 && (
+  const adjustUI = (
             <div className="max-w-3xl">
-              <h1 className="font-display text-2xl">Adjust the plan</h1>
+              {type === 'monthly' ? <h1 className="font-display text-2xl">Adjust the plan</h1> : <h2 className="font-display text-xl">Adjust a goal (optional)</h2>}
               <p className="mb-4 text-sm text-muted-foreground">Only changes you approve are applied, each recorded in the goal’s history with your reason. Keeping the plan is a valid decision.</p>
               {answers.change && <blockquote className="mb-4 border-l-2 border-primary/40 pl-3 text-sm italic text-muted-foreground">You wrote: “{answers.change}”</blockquote>}
               <div className="mb-4 flex flex-wrap gap-2">
@@ -451,31 +392,152 @@ function ReviewFlow({ type, onExit }: { type: 'weekly' | 'monthly'; onExit: () =
                   })}
                 </ul>
               )}
-              {type === 'weekly' && answers.focus.trim() && (
-                <label className="mt-4 flex min-h-11 items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm">
-                  <Checkbox checked={applyFocus} onCheckedChange={(v) => setApplyFocus(!!v)} data-testid="checkbox-apply-focus" />
-                  <span>Also set “{answers.focus.trim()}” as the focus for {nextFocusWeek} week</span>
-                </label>
-              )}
               <p className="mt-4 text-sm text-muted-foreground" data-testid="text-approved-count">{approved.length} of {drafts.length} changes approved.</p>
             </div>
+  );
+
+  const periodText = `${period.label}, ${fmt(period.start, 'MMM d')} – ${fmt(period.end, 'MMM d')}`;
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm capitalize text-muted-foreground">{type} review</div>
+          <div className="font-display text-xl" data-testid="text-review-period">{periodText}</div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={requestExit} disabled={action.frozen} data-testid="button-exit-review"><X /> Exit</Button>
+      </div>
+
+      <ol className={cn('mb-6 grid gap-1.5', type === 'weekly' ? 'grid-cols-3 sm:grid-cols-5' : 'grid-cols-3')} aria-label="Review phases">
+        {PHASES.map((p, i) => (
+          <li key={p}>
+            <button
+              type="button"
+              onClick={() => !action.frozen && setPhase(i)}
+              aria-current={phase === i ? 'step' : undefined}
+              className={cn(
+                'flex min-h-10 w-full items-center gap-2 border-t-2 pt-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                i <= phase ? 'border-primary text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
+              )}
+              data-testid={`button-phase-${p.toLowerCase().replace(' ', '-')}`}
+            >
+              <span className="font-num text-xs">{i + 1}</span> {p}
+            </button>
+          </li>
+        ))}
+      </ol>
+
+      <fieldset disabled={action.frozen} className="min-w-0">
+      <AnimatePresence mode="wait">
+        <motion.div key={phase} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+          {type === 'weekly' && (
+            <WeeklyStep
+              step={phase}
+              periods={periods}
+              periodIdx={periodIdx}
+              setPeriodIdx={setPeriodIdx}
+              snapshot={snapshot}
+              insights={insights}
+              answers={answers}
+              setAnswers={setAnswers}
+              carryCandidates={carryCandidates}
+              carry={carry}
+              setCarry={setCarry}
+              nextWs={nextWs}
+              monday={monday}
+              setMonday={setMonday}
+              applyFocus={applyFocus}
+              setApplyFocus={setApplyFocus}
+              nextFocusWeek={nextFocusWeek}
+              periodText={periodText}
+              adjust={adjustUI}
+              approved={approved}
+              carryTasks={carryTasks}
+              willApplyFocus={willApplyFocus}
+            />
           )}
+          {type === 'monthly' && phase === 0 && (
+            <div className="grid gap-5 lg:grid-cols-12">
+              <div className="lg:col-span-7">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h1 className="font-display text-2xl">What happened</h1>
+                  <div className="inline-flex rounded-lg border border-border p-1" role="group" aria-label="Review period">
+                    {periods.map((p, i) => (
+                      <button key={p.label} type="button" onClick={() => setPeriodIdx(i)} aria-pressed={periodIdx === i} className={cn('min-h-8 rounded-md px-3 text-sm', periodIdx === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')} data-testid={`button-period-${i}`}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="surface p-4"><SnapshotView snap={snapshot} /></div>
+              </div>
+              <div className="lg:col-span-5">
+                <h2 className="mb-2 text-sm font-medium">What needs a decision</h2>
+                {insights.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing stands out.</p>
+                ) : (
+                  <ul className="space-y-2.5 text-sm">
+                    {insights.map((i) => (
+                      <li key={i.id} className="flex gap-2">
+                        <span className="min-w-0"><span className="font-medium">{i.title}.</span> <span className="text-muted-foreground">{i.detail}</span></span>
+                        <span className="ml-auto shrink-0 text-muted-foreground" title={`Rule: ${i.rule}`} aria-label={`Rule: ${i.rule}`}><Info className="size-3.5" /></span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          {type === 'monthly' && phase === 1 && (
+            <div className="grid gap-5 lg:grid-cols-12">
+              <div className="space-y-4 lg:col-span-8">
+                <div>
+                  <h1 className="font-display text-2xl">Reflect</h1>
+                  <p className="text-sm text-muted-foreground">Short answers are fine. Every question is optional.</p>
+                </div>
+                {QUESTIONS.map((q, i) => (
+                  <div key={q.key}>
+                    <label htmlFor={`q-${q.key}`} className="block text-[0.95rem] font-medium">
+                      <span className="mr-1.5 font-num text-xs text-primary">{i + 1}</span>{q.q}
+                    </label>
+                    <p className="mb-1.5 text-xs text-muted-foreground">{q.help}</p>
+                    {q.key === 'focus' ? (
+                      <Input id={`q-${q.key}`} value={answers[q.key]} onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))} className="h-10" data-testid={`input-review-${q.key}`} />
+                    ) : (
+                      <Textarea id={`q-${q.key}`} autoFocus={i === 0} rows={2} value={answers[q.key]} onChange={(e) => setAnswers((a) => ({ ...a, [q.key]: e.target.value }))} className="min-h-[3.5rem] text-[0.95rem]" data-testid={`input-review-${q.key}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <aside className="lg:col-span-4" aria-label="Actuals for reference">
+                <div className="surface p-4 lg:sticky lg:top-6">
+                  <div className="mb-2 text-xs text-muted-foreground">For reference &middot; {periodText}</div>
+                  <SnapshotView snap={snapshot} compact />
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {type === 'monthly' && phase === 2 && adjustUI}
         </motion.div>
       </AnimatePresence>
+      </fieldset>
 
       <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:-mx-0 md:rounded-t-xl md:px-3">
-        <Button variant="ghost" className="h-10" onClick={() => (phase === 0 ? requestExit() : setPhase((s) => s - 1))} data-testid="button-review-back">
+        <Button variant="ghost" className="h-10" disabled={action.frozen} onClick={() => (phase === 0 ? requestExit() : setPhase((s) => s - 1))} data-testid="button-review-back">
           <ArrowLeft /> {phase === 0 ? 'Cancel' : 'Back'}
         </Button>
         <span className="hidden text-xs text-muted-foreground sm:inline">
-          {invalidApproved.length > 0 ? <span className="text-destructive">Fix {invalidApproved.length} approved change{invalidApproved.length > 1 ? 's' : ''} to save</span> : `Step ${phase + 1} of 3 · ${PHASES[phase]}`}
+          {invalidApproved.length > 0 ? <span className="text-warning">Fix {invalidApproved.length} approved change{invalidApproved.length > 1 ? 's' : ''} to save</span> : `Step ${phase + 1} of ${PHASES.length} · ${PHASES[phase]}`}
         </span>
         {phase < PHASES.length - 1 ? (
           <Button className="h-10" onClick={() => setPhase((s) => s + 1)} data-testid="button-review-next">Continue to {PHASES[phase + 1]} <ArrowRight /></Button>
         ) : (
-          <Button className="h-10" onClick={save} disabled={invalidApproved.length > 0} data-testid="button-save-review"><Check /> Save review</Button>
+          <Button className="h-10" onClick={save} disabled={invalidApproved.length > 0 || action.pending} data-testid="button-save-review"><Check /> {action.pending ? 'Saving' : action.error ? 'Retry save' : 'Save review'}</Button>
         )}
       </div>
+      {action.error && <p role="alert" className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-center text-sm text-warning" data-testid="text-review-save-error">{action.error} Your answers are still here. Try saving again.</p>}
       <p className="mt-3 text-center text-xs text-muted-foreground">Answers are kept while you move between steps, but not saved until you save the review. Last saved review: {state.reviews[0] ? relDay(state.reviews[0].createdAt.slice(0, 10)).toLowerCase() : 'none'}.</p>
 
       <ConfirmDialog
@@ -487,6 +549,188 @@ function ReviewFlow({ type, onExit }: { type: 'weekly' | 'monthly'; onExit: () =
         destructive
         onConfirm={() => { setNavGuard(null); onExit(); }}
       />
+    </div>
+  );
+}
+
+type WeeklyStepProps = {
+  step: number;
+  periods: { label: string; start: string; end: string }[];
+  periodIdx: number;
+  setPeriodIdx: (i: number) => void;
+  snapshot: ReviewSnapshot;
+  insights: ReturnType<typeof generateInsights>;
+  answers: ReviewAnswers;
+  setAnswers: React.Dispatch<React.SetStateAction<ReviewAnswers>>;
+  carryCandidates: Task[];
+  carry: string[];
+  setCarry: React.Dispatch<React.SetStateAction<string[]>>;
+  nextWs: string;
+  monday: string;
+  setMonday: (v: string) => void;
+  applyFocus: boolean;
+  setApplyFocus: (v: boolean) => void;
+  nextFocusWeek: string;
+  periodText: string;
+  adjust: React.ReactNode;
+  approved: ProposedAdjustment[];
+  carryTasks: Task[];
+  willApplyFocus: boolean;
+};
+
+function StepHead({ title, help }: { title: string; help: string }) {
+  return (
+    <div className="mb-4">
+      <h1 className="font-display text-2xl">{title}</h1>
+      <p className="text-sm text-muted-foreground">{help}</p>
+    </div>
+  );
+}
+
+function Supplement({ id, label, help, value, onChange }: { id: string; label: string; help: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <details className="mt-4 rounded-lg border border-border px-3 py-2" open={!!value}>
+      <summary className="flex min-h-9 cursor-pointer items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <ChevronDown className="size-3.5" /> {label} <span className="text-xs">(optional)</span>
+      </summary>
+      <p className="mb-1.5 mt-1 text-xs text-muted-foreground">{help}</p>
+      <Textarea id={id} rows={2} value={value} onChange={(e) => onChange(e.target.value)} className="min-h-[3.5rem]" data-testid={`input-review-${id}`} />
+    </details>
+  );
+}
+
+/** Guided weekly review: Wins, Misses, Carryover, Next focus, Monday, then a summary to confirm. Nothing changes until Save. */
+function WeeklyStep(p: WeeklyStepProps) {
+  const set = (k: 'wins' | 'misses' | 'learned' | 'change' | 'focus', v: string) => p.setAnswers((a) => ({ ...a, [k]: v }));
+  const aside = (
+    <aside className="lg:col-span-5" aria-label="Actuals for reference">
+      <div className="surface p-4 lg:sticky lg:top-6">
+        <div className="mb-2 text-xs text-muted-foreground">For reference &middot; {p.periodText}</div>
+        <SnapshotView snap={p.snapshot} compact />
+      </div>
+    </aside>
+  );
+  if (p.step === 0)
+    return (
+      <div className="grid gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <StepHead title="Wins" help="What actually moved forward? Results and finished work count, effort is fine too." />
+            <div className="inline-flex rounded-lg border border-border p-1" role="group" aria-label="Review period">
+              {p.periods.map((x, i) => (
+                <button key={x.label} type="button" onClick={() => p.setPeriodIdx(i)} aria-pressed={p.periodIdx === i} className={cn('min-h-8 rounded-md px-3 text-sm', p.periodIdx === i ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')} data-testid={`button-period-${i}`}>
+                  {x.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Textarea id="q-wins" autoFocus rows={4} value={p.answers.wins} onChange={(e) => set('wins', e.target.value)} placeholder="A client sign-off, a shipped feature, a good run..." data-testid="input-review-wins" />
+        </div>
+        {aside}
+      </div>
+    );
+  if (p.step === 1)
+    return (
+      <div className="grid gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <StepHead title="Misses" help="What slipped, and why? Time, energy, clarity, or the plan itself. No judgement here." />
+          <Textarea id="q-misses" autoFocus rows={4} value={p.answers.misses} onChange={(e) => set('misses', e.target.value)} data-testid="input-review-misses" />
+          <Supplement id="learned" label="What did the results tell you?" help="Compare completed tasks with the numbers you logged." value={p.answers.learned} onChange={(v) => set('learned', v)} />
+        </div>
+        <div className="lg:col-span-5">
+          <h2 className="mb-2 text-sm font-medium">What needs a decision</h2>
+          {p.insights.length === 0 ? <p className="text-sm text-muted-foreground">Nothing stands out.</p> : (
+            <ul className="space-y-2.5 text-sm">
+              {p.insights.map((i) => (
+                <li key={i.id} className="flex gap-2">
+                  <span className="min-w-0"><span className="font-medium">{i.title}.</span> <span className="text-muted-foreground">{i.detail}</span></span>
+                  <span className="ml-auto shrink-0 text-muted-foreground" title={`Rule: ${i.rule}`} aria-label={`Rule: ${i.rule}`}><Info className="size-3.5" /></span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  if (p.step === 2) {
+    const all = p.carryCandidates.length > 0 && p.carry.length === p.carryCandidates.length;
+    return (
+      <div className="max-w-3xl">
+        <StepHead title="Carryover tasks" help={`Pick the open tasks worth carrying into Monday, ${fmt(p.nextWs, 'MMM d')}. They move only when you save the review.`} />
+        {p.carryCandidates.length === 0 ? (
+          <div className="surface"><EmptyState className="py-6" title="Nothing left open" body="Every planned task from this period is done or already moved." /></div>
+        ) : (
+          <>
+            <button type="button" className="mb-2 min-h-8 text-sm text-primary hover:underline" onClick={() => p.setCarry(all ? [] : p.carryCandidates.map((t) => t.id))} data-testid="button-carry-all">
+              {all ? 'Clear selection' : 'Select all'}
+            </button>
+            <ul className="surface divide-y divide-border overflow-hidden">
+              {p.carryCandidates.map((t) => {
+                const on = p.carry.includes(t.id);
+                return (
+                  <li key={t.id}>
+                    <label className={cn('flex min-h-12 cursor-pointer items-center gap-3 px-4 py-2.5', on && 'bg-accent/40')} data-testid={`row-carry-${t.id}`}>
+                      <Checkbox checked={on} onCheckedChange={(v) => p.setCarry((c) => (v ? [...c, t.id] : c.filter((x) => x !== t.id)))} data-testid={`checkbox-carry-${t.id}`} />
+                      <span className="min-w-0 flex-1 break-words text-sm">{t.title}</span>
+                      <span className="shrink-0 font-num text-xs text-muted-foreground">{fmt((t.plannedDate ?? t.dueDate)!, 'MMM d')}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground" data-testid="text-carry-count">{p.carry.length} of {p.carryCandidates.length} selected. Unselected tasks stay where they are.</p>
+          </>
+        )}
+      </div>
+    );
+  }
+  if (p.step === 3)
+    return (
+      <div className="max-w-3xl">
+        <StepHead title="Next week's focus" help="One sentence that tells future you what matters most." />
+        <Input id="q-focus" autoFocus value={p.answers.focus} onChange={(e) => set('focus', e.target.value)} className="h-11 text-base" data-testid="input-review-focus" />
+        {p.answers.focus.trim() && (
+          <label className="mt-3 flex min-h-11 items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-sm">
+            <Checkbox checked={p.applyFocus} onCheckedChange={(v) => p.setApplyFocus(!!v)} data-testid="checkbox-apply-focus" />
+            <span>Also set it as the focus for {p.nextFocusWeek} week when I save</span>
+          </label>
+        )}
+        <Supplement id="change" label="What will you change?" help="A note to yourself. Approve an actual goal change below if needed." value={p.answers.change} onChange={(v) => set('change', v)} />
+        <div className="mt-6">{p.adjust}</div>
+      </div>
+    );
+  const monday = (
+      <div className="max-w-3xl">
+        <StepHead title="One commitment for Monday" help="The first thing you will do on Monday morning. Small and concrete beats ambitious." />
+        <Input id="q-monday" autoFocus value={p.monday} onChange={(e) => p.setMonday(e.target.value)} placeholder="Send the revised proposal before 10:00" className="h-11 text-base" data-testid="input-review-monday" />
+        <p className="mt-2 text-xs text-muted-foreground">Saved with the review. It does not create a task.</p>
+      </div>
+  );
+  const row = (label: string, value: React.ReactNode) => (
+    <div className="grid gap-1 py-2.5 sm:grid-cols-[12rem_1fr]">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-[0.95rem]">{value}</dd>
+    </div>
+  );
+  const none = <span className="text-muted-foreground">Nothing written</span>;
+  return (
+    <div className="max-w-3xl space-y-8">
+      {monday}
+      <div>
+      <StepHead title="Check and save" help="Nothing has changed yet. Saving records this review and applies only what is listed here." />
+      <dl className="surface divide-y divide-border px-4" data-testid="list-review-summary">
+        {row('Wins', p.answers.wins || none)}
+        {row('Misses', p.answers.misses || none)}
+        {p.answers.learned && row('Results told me', p.answers.learned)}
+        {row('Carryover', p.carryTasks.length ? (
+          <>Move {p.carryTasks.length} task{p.carryTasks.length === 1 ? '' : 's'} to {fmt(p.nextWs, 'EEEE, MMM d')}:<ul className="mt-1 list-disc pl-5 text-sm">{p.carryTasks.map((t) => <li key={t.id}>{t.title}</li>)}</ul></>
+        ) : <span className="text-muted-foreground">No tasks moved</span>)}
+        {row("Next week's focus", p.answers.focus ? <>{p.answers.focus}<div className="text-xs text-muted-foreground">{p.willApplyFocus ? `Will be set as the focus for ${p.nextFocusWeek} week` : 'Saved with the review only'}</div></> : none)}
+        {p.answers.change && row('What will change', p.answers.change)}
+        {row('Goal changes', p.approved.length ? <ul className="space-y-1 text-sm">{p.approved.map((a, i) => <li key={i} className="flex gap-2"><Check className="mt-0.5 size-3.5 shrink-0 text-primary" />{a.kind === 'strategy' ? 'Revise strategy' : a.kind === 'milestone' ? `Move milestone to ${fmt(a.date)}` : 'Pause goal'}: {a.reason}</li>)}</ul> : <span className="text-muted-foreground">None. Plan kept as is.</span>)}
+        {row('Monday commitment', p.monday || none)}
+      </dl>
+      </div>
     </div>
   );
 }

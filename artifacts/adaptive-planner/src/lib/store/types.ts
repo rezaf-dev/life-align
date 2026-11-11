@@ -3,6 +3,16 @@ export type GoalStatus = 'active' | 'paused' | 'completed' | 'cancelled';
 export type Priority = 'high' | 'medium' | 'low';
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type MetricKind = 'outcome' | 'leading';
+export type GoalCategory = 'client-work' | 'product-build' | 'learning' | 'sales-outreach' | 'admin' | 'personal' | 'other';
+export const GOAL_CATEGORIES: { value: GoalCategory; label: string }[] = [
+  { value: 'client-work', label: 'Client work' },
+  { value: 'product-build', label: 'Product build' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'sales-outreach', label: 'Sales/outreach' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'personal', label: 'Personal' },
+  { value: 'other', label: 'Other' },
+];
 export type { WorkSession } from '@workspace/api-zod';
 export type { ActiveWorkTimer } from '@workspace/api-zod';
 export type { SavedTimesheet } from '@workspace/api-zod';
@@ -78,6 +88,7 @@ export interface HistoryEvent {
 export interface Goal {
   id: string;
   color?: string;
+  category?: GoalCategory;
   title: string;
   outcome: string;
   area: Area;
@@ -160,6 +171,8 @@ export interface ReviewAnswers {
   learned: string;
   change: string;
   focus: string;
+  carryoverTaskIds?: string[];
+  mondayCommitment?: string;
 }
 
 export interface Adjustment {

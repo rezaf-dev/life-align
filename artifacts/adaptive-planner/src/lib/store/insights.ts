@@ -1,18 +1,14 @@
 import { addDaysIso, daysBetween, fmt, todayIso, weekStartIso } from '@/lib/dates';
 import {
   completedBetween,
-  formatValue,
   goalHealth,
   isOpen,
   lastEntryDate,
-  metricValueAt,
-  measurementTargetAt,
-  measurementBaseline,
-  measurementPeriod,
   overdueTasks,
   tasksInRange,
 } from './selectors';
 import type { AppState } from './types';
+import { getGoalPaceFeedback } from '../goal-pace';
 
 export interface Insight {
   id: string;
@@ -49,23 +45,20 @@ export function generateInsights(s: AppState, today = todayIso()): Insight[] {
   active.forEach((g) => {
     const health = goalHealth(g, today);
     if (health.metric && (health.status === 'behind' || health.status === 'watch')) {
-      const m = health.metric;
-      const target = measurementTargetAt(m, today);
-      const baseline = measurementBaseline(m);
-      const expectedValue = baseline + (target - baseline) * health.expected;
-      const period = measurementPeriod(m, today);
+      const feedback = getGoalPaceFeedback(g, today);
       out.push({
         id: `pace-${g.id}`,
         goalId: g.id, goalTitle: g.title,
         tone: health.status === 'behind' ? 'warning' : 'notice',
-        title: `${m.name} is behind linear pace`,
-        detail: `${formatValue(metricValueAt(m, today), m.unit)} now; a straight line to ${formatValue(target, m.unit)} by ${fmt(period?.end ?? g.targetDate)} would be about ${formatValue(Math.round(expectedValue * 10) / 10, m.unit)} today.`,
+        title: `Choose the next step for ${g.title}`,
+        detail: `${feedback.current} ${feedback.expected} ${feedback.forecast} ${feedback.recommendation}`,
         href: `/goals/${g.id}`,
-        rule: 'Latest outcome value vs. straight line from start to target date',
+        rule: 'Measured progress since the active start; an even-pace reference and an estimated completion at the observed average pace. Reserved time is not progress.',
       });
     }
 
-    const plannedThisWeek = tasksInRange(s.tasks, ws, we).filter((t) => t.goalId === g.id).length;
+    const plannedThisWeek = tasksInRange(s.tasks, ws, we).filter((t) => t.goalId === g.id).length +
+      (s.sessions ?? []).filter((session) => session.goalId === g.id && session.status === 'planned' && session.plannedDate && session.plannedDate >= ws && session.plannedDate <= we).length;
     if (!plannedThisWeek) {
       out.push({
         id: `noplan-${g.id}`,
