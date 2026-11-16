@@ -3,3 +3,4 @@
 - [Time tracking and timesheets](time-tracking-expectations.md) — optional timers, work-done capture, private report notes, and saved-timesheet/payment boundaries.
 - [Missed work decisions](missed-work-expectations.md) — visible replan/skip decisions; skipping is not completion or time worked, and recurrence must not create catch-up backlogs.
 - [Goal color identity](goal-colors.md) — individual goals need stable unique colors across planning and reports, independent of area and status.
+- [Goal priority and spotlight](goal-focus.md) — overall importance and current focus are separate; spotlight affects visibility, not schedules or progress.

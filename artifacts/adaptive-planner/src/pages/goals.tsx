@@ -12,6 +12,8 @@ import { useAppState } from '@/lib/store/store';
 import { AREAS } from '@/lib/store/types';
 import type { Area, GoalStatus } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
+import { groupGoalFocus } from '@/lib/goal-focus';
+import { GoalPriorityControl, GoalSpotlightButton } from '@/components/goal-focus-controls';
 
 const STATUS_FILTERS: { value: GoalStatus | 'all'; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -49,14 +51,11 @@ export default function GoalsPage() {
     () =>
       state.goals
         .filter((g) => (status === 'all' ? true : g.status === status))
-        .filter((g) => (area === 'all' ? true : g.area === area))
-        .sort((a, b) => {
-          const p = { high: 0, medium: 1, low: 2 };
-          return p[a.priority] - p[b.priority] || (a.targetDate < b.targetDate ? -1 : 1);
-        }),
+        .filter((g) => (area === 'all' ? true : g.area === area)),
     [state.goals, status, area],
   );
   const count = (s: GoalStatus | 'all') => state.goals.filter((g) => s === 'all' || g.status === s).length;
+  const { focus, remaining } = groupGoalFocus(goals);
 
   return (
     <div>
@@ -98,29 +97,43 @@ export default function GoalsPage() {
           />
         </div>
       ) : (
+        <div className="space-y-6">
+          {[{ key: 'focus', title: 'In focus', goals: focus }, { key: 'remaining', title: focus.length ? 'Other goals' : 'Goals', goals: remaining }].filter((group) => group.goals.length > 0).map((group) => (
+          <section key={group.key} aria-labelledby={`goal-group-${group.key}`}>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id={`goal-group-${group.key}`} className="font-display text-xl">{group.title} <span className="ml-1 font-sans text-sm text-muted-foreground">{group.goals.length}</span></h2>
+              {group.key === 'focus' && <p className="text-xs text-muted-foreground">{focus.length > 3 ? 'For a clearer focus, consider keeping just three.' : 'Your current focus. Three or fewer works best.'}</p>}
+              {group.key === 'remaining' && !focus.length && status === 'active' && <p className="text-xs text-muted-foreground">Star a goal to keep it in focus.</p>}
+            </div>
         <ol className="surface divide-y divide-border overflow-hidden">
-          {goals.map((g, i) => {
+          {group.goals.map((g) => {
             const h = goalHealth(g, today);
             const ex = goalExecution(g.id, state.tasks);
             const next = g.milestones.filter((m) => !m.done).sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0];
             const msDone = g.milestones.filter((m) => m.done).length;
             return (
-              <li key={g.id} className="rise" style={{ animationDelay: `${i * 40}ms` }}>
+              <li key={g.id} className="min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-5 pt-3 md:px-6">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AreaTag area={g.area} goalId={g.id} />
+                    {g.status !== 'active' && <StatusPill status={g.status} />}
+                    {g.isDemo && <SampleMark />}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <GoalPriorityControl goal={g} />
+                    <GoalSpotlightButton goal={g} />
+                  </div>
+                </div>
                 <Link
                   href={`/goals/${g.id}`}
-                  className="group grid gap-4 p-5 transition-colors hover:bg-muted/40 md:grid-cols-12 md:items-center md:p-6"
+                  className="group grid gap-4 px-5 pb-5 pt-2 transition-colors hover:bg-muted/40 md:grid-cols-12 md:items-center md:px-6 md:pb-6"
                   data-testid={`card-goal-${g.id}`}
                 >
                   <div className="md:col-span-6">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <AreaTag area={g.area} goalId={g.id} />
-                      {g.status !== 'active' && <StatusPill status={g.status} />}
-                      {g.isDemo && <SampleMark />}
-                    </div>
-                    <h2 className="font-display text-xl leading-snug group-hover:text-primary md:text-[1.4rem]">
+                    <h3 className="font-display text-xl leading-snug group-hover:text-primary md:text-[1.4rem]">
                       {g.title}
                       <ArrowUpRight className="ml-1 inline size-4 opacity-0 transition-opacity group-hover:opacity-60" />
-                    </h2>
+                    </h3>
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{g.outcome}</p>
                   </div>
                   <div className="md:col-span-4">
@@ -150,6 +163,9 @@ export default function GoalsPage() {
             );
           })}
         </ol>
+          </section>
+          ))}
+        </div>
       )}
       <NewGoalDialog open={creating} onOpenChange={setCreating} />
     </div>

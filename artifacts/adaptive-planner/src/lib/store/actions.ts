@@ -209,6 +209,27 @@ export function editGoalBasics(id: string, patch: Pick<Goal, 'title' | 'outcome'
   });
 }
 
+export function setGoalPriority(id: string, priority: Priority) {
+  if (!['high', 'medium', 'low'].includes(priority)) throw new Error('Choose High, Medium, or Low priority.');
+  update((d) => {
+    const goal = findGoal(d, id);
+    if (goal.priority === priority) return;
+    const from = goal.priority;
+    goal.priority = priority;
+    goal.history.unshift(ev({ kind: 'edit', summary: `Priority changed to ${priority}`, from, to: priority }));
+  });
+}
+
+export function setGoalSpotlight(id: string, spotlight: boolean) {
+  update((d) => {
+    const goal = findGoal(d, id);
+    if (spotlight && goal.status !== 'active') throw new Error('Resume this goal before adding it to your focus.');
+    if (!!goal.spotlight === spotlight) return;
+    goal.spotlight = spotlight;
+    goal.history.unshift(ev({ kind: 'edit', summary: spotlight ? 'Added to spotlight' : 'Removed from spotlight' }));
+  });
+}
+
 export function changeStrategy(
   id: string,
   summary: string,

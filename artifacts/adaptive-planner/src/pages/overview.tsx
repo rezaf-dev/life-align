@@ -2,7 +2,7 @@ import { measurementTargetAt, plannedWorkMinutes } from '@workspace/api-zod';
 import { DayAgenda } from '@/components/day-agenda';
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { ArrowRight, Bell, Check, Flag, Info, LineChart, X } from 'lucide-react';
+import { ArrowRight, Bell, Check, Flag, Info, LineChart, Star, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MissedWork } from '@/components/missed-work';
 import { useTaskCompletion } from '@/components/task-completion';
@@ -25,6 +25,7 @@ import type { Goal } from '@/lib/store/types';
 import { cn } from '@/lib/utils';
 import { AskButton } from '@/components/ai/ask-button';
 import { OverviewTimeCard } from '@/components/time-summary';
+import { groupGoalFocus } from '@/lib/goal-focus';
 
 function greeting() {
   const h = new Date().getHours();
@@ -43,7 +44,8 @@ export default function OverviewPage() {
 
   const data = useMemo(() => {
     const reminders = dueReminders(state.tasks, nowStamp());
-    const active = state.goals.filter((g) => g.status === 'active');
+    const groups = groupGoalFocus(state.goals.filter((g) => g.status === 'active'));
+    const active = [...groups.focus, ...groups.remaining];
     const weekTasks = tasksInRange(state.tasks, ws, addDaysIso(ws, 6));
     const plan = state.weekPlans[ws];
     const effort = plannedWorkMinutes(state, ws, addDaysIso(ws, 6));
@@ -53,7 +55,7 @@ export default function OverviewPage() {
       .slice(0, 4);
     const insights = generateInsights(state, today).slice(0, 4);
     const lastWeekly = state.reviews.find((r) => r.type === 'weekly');
-    return { reminders, active, weekTasks, plan, effort, milestones, insights, lastWeekly };
+    return { reminders, active, focusCount: groups.focus.length, weekTasks, plan, effort, milestones, insights, lastWeekly };
   }, [state, today, ws]);
 
   const weekDone = data.weekTasks.filter((t) => t.status === 'done').length;
@@ -163,11 +165,16 @@ export default function OverviewPage() {
               <EmptyState mark="circle" title="No active goals" body="Set one direction to connect actions to results." action={<Button size="sm" asChild><Link href="/goals?new=1">Add a goal</Link></Button>} />
             ) : (
               <ul className="space-y-4">
-                {data.active.map((g) => {
+                {data.active.map((g, index) => {
                   const h = goalHealth(g, today);
                   const ex = goalExecution(g.id, state.tasks);
+                  const next = g.spotlight ? g.milestones.filter((m) => !m.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] : undefined;
                   return (
                     <li key={g.id} data-testid={`health-goal-${g.id}`}>
+                      {index === 0 && data.focusCount > 0 && (
+                        <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium"><Star className="size-3.5 fill-current" aria-hidden /> In focus <span className="font-normal text-muted-foreground">· {data.focusCount}</span></h3>
+                      )}
+                      {index === data.focusCount && data.focusCount > 0 && <h3 className="mb-3 border-t border-border pt-3 text-sm text-muted-foreground">Other goals</h3>}
                       <div className="flex items-start justify-between gap-3">
                         <Link href={`/goals/${g.id}`} className="flex min-w-0 flex-1 items-center gap-2 hover:text-primary" data-testid={`link-goal-${g.id}`}>
                           <AreaDot area={g.area} goalId={g.id} />
@@ -195,11 +202,18 @@ export default function OverviewPage() {
                           <LineChart className="size-3" /> Update result
                         </button>
                       </div>
+                      {g.spotlight && (
+                        <p className="mt-1 break-words text-xs text-muted-foreground" data-testid={`text-focus-milestone-${g.id}`}>
+                          {next ? <>Next: <Link href={`/goals/${g.id}`} className="text-foreground/80 hover:underline">{next.title}</Link> · {relDay(next.dueDate)}</> : 'No upcoming milestone'}
+                        </p>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             )}
+            {data.active.length > 0 && data.focusCount === 0 && <p className="mt-3 text-xs text-muted-foreground"><Link href="/goals" className="text-primary hover:underline">Spotlight a goal</Link> to keep your current focus at the top.</p>}
+            {data.focusCount > 3 && <p className="mt-3 text-xs text-muted-foreground">For a clearer focus, consider keeping just three spotlight goals. <Link href="/goals" className="text-primary hover:underline">Manage focus</Link></p>}
             <details className="mt-4 text-xs text-muted-foreground">
               <summary className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <Info className="size-3.5" /> How to read this

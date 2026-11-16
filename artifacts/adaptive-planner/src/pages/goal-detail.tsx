@@ -68,6 +68,7 @@ import { AskButton } from '@/components/ai/ask-button';
 import { SessionEntryRow, WorkSessionsPanel } from '@/components/work-sessions';
 import { GoalReports } from '@/components/goal-reports';
 import { GoalTimeSummary } from '@/components/time-summary';
+import { GoalPriorityControl, GoalSpotlightButton } from '@/components/goal-focus-controls';
 
 type DialogKind =
   | null
@@ -143,7 +144,8 @@ function GoalWorkspace({ goal }: { goal: Goal }) {
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <AreaTag area={goal.area} goalId={goal.id} />
             <StatusPill status={goal.status} />
-            <span className="text-xs capitalize text-muted-foreground">{goal.priority} priority</span>
+            <GoalPriorityControl goal={goal} />
+            <GoalSpotlightButton goal={goal} />
             {goal.isDemo && <SampleMark />}
           </div>
           <h1 className="font-display text-[1.8rem] font-normal leading-tight md:text-[2.2rem]" data-testid="text-goal-title">{goal.title}</h1>
